@@ -1,0 +1,13 @@
+# CMake build tree and the built otm_hpp.dll
+build/
+bin/
+
+# Visual Studio and CLion CMake folders
+.vs/
+out/
+.idea/
+cmake-build-*/
+
+# Hammer++ runtime files, in case the patcher is pointed at a copy inside this folder
+*.log
+*.mdmp
