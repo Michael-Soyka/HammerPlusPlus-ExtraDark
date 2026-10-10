@@ -1,6 +1,6 @@
 //============ Copyright 2026 Moon-6 Team, All rights reserved. ===============//
 //
-// Purpose: Debug log to hppxdark.log next to the DLL, on with [Debug] Log=1 in hppxdark.ini
+// Purpose: Debug log to hppxdark.log next to the DLL, built in with HPPXDARK_LOG
 //
 //=============================================================================//
 
@@ -30,39 +30,37 @@ std::wstring ModuleFilePath( const wchar_t *pwszName )
 	return path;
 }
 
-static FILE *OpenLog()
-{
-	static FILE *s_pFile   = nullptr;
-	static bool s_bChecked = false;
-	if ( s_bChecked )
+#ifdef HPPXDARK_LOG
+	static FILE *OpenLog()
 	{
+		static FILE *s_pFile  = nullptr;
+		static bool s_bOpened = false;
+		if ( s_bOpened )
+		{
+			return s_pFile;
+		}
+
+		s_bOpened = true;
+
+		// Shared, so the log can be read while Hammer++ runs
+		s_pFile = _wfsopen( ModuleFilePath( L"hppxdark.log" ).c_str(), L"w", _SH_DENYNO );
 		return s_pFile;
 	}
 
-	s_bChecked = true;
-	if ( !GetPrivateProfileIntW( L"Debug", L"Log", 0, ModuleFilePath( L"hppxdark.ini" ).c_str() ) )
+	void Log( const char *pszFormat, ... )
 	{
-		return nullptr;
+		FILE *pFile = OpenLog();
+		if ( !pFile )
+		{
+			return;
+		}
+
+		va_list args;
+		va_start( args, pszFormat );
+		vfprintf( pFile, pszFormat, args );
+		va_end( args );
+
+		fputc( '\n', pFile );
+		fflush( pFile );
 	}
-
-	// Shared, so the log can be read while Hammer++ runs
-	s_pFile = _wfsopen( ModuleFilePath( L"hppxdark.log" ).c_str(), L"w", _SH_DENYNO );
-	return s_pFile;
-}
-
-void Log( const char *pszFormat, ... )
-{
-	FILE *pFile = OpenLog();
-	if ( !pFile )
-	{
-		return;
-	}
-
-	va_list args;
-	va_start( args, pszFormat );
-	vfprintf( pFile, pszFormat, args );
-	va_end( args );
-
-	fputc( '\n', pFile );
-	fflush( pFile );
-}
+#endif
