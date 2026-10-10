@@ -18,27 +18,55 @@
 #include <string>
 
 //-----------------------------------------------------------------------------
-// Palette
+// Palette: defaults, each one can be set in [Palette] of hppxdark.ini
 //-----------------------------------------------------------------------------
 
-static const COLORREF s_ColorFace          = RGB( 45, 45, 48 );
-static const COLORREF s_ColorWindow        = RGB( 30, 30, 30 );
-static const COLORREF s_ColorEdit          = RGB( 37, 37, 38 );
-static const COLORREF s_ColorText          = RGB( 220, 220, 220 );
-static const COLORREF s_ColorGrayText      = RGB( 128, 128, 128 );
-static const COLORREF s_ColorMenu          = RGB( 43, 43, 43 );
-static const COLORREF s_ColorMenuHot       = RGB( 62, 62, 66 );
-static const COLORREF s_ColorHighlight     = RGB( 0, 120, 215 );
-static const COLORREF s_ColorHighlightText = RGB( 255, 255, 255 );
-static const COLORREF s_ColorLight         = RGB( 62, 62, 66 );
-static const COLORREF s_ColorHilight       = RGB( 80, 80, 84 );
-static const COLORREF s_ColorShadow        = RGB( 28, 28, 30 );
-static const COLORREF s_ColorDarkShadow    = RGB( 15, 15, 15 );
-static const COLORREF s_ColorTooltip       = RGB( 50, 50, 52 );
-static const COLORREF s_ColorHotLight      = RGB( 86, 156, 214 );
-static const COLORREF s_ColorWorkspace     = RGB( 28, 28, 28 );
-static const COLORREF s_ColorFrame         = RGB( 20, 20, 20 );
-static const COLORREF s_ColorBorder        = RGB( 100, 100, 104 );
+static COLORREF s_ColorFace          = RGB( 45, 45, 48 );
+static COLORREF s_ColorWindow        = RGB( 30, 30, 30 );
+static COLORREF s_ColorEdit          = RGB( 37, 37, 38 );
+static COLORREF s_ColorText          = RGB( 220, 220, 220 );
+static COLORREF s_ColorGrayText      = RGB( 128, 128, 128 );
+static COLORREF s_ColorMenu          = RGB( 43, 43, 43 );
+static COLORREF s_ColorMenuHot       = RGB( 62, 62, 66 );
+static COLORREF s_ColorHighlight     = RGB( 0, 120, 215 );
+static COLORREF s_ColorHighlightText = RGB( 255, 255, 255 );
+static COLORREF s_ColorLight         = RGB( 62, 62, 66 );
+static COLORREF s_ColorHilight       = RGB( 80, 80, 84 );
+static COLORREF s_ColorShadow        = RGB( 28, 28, 30 );
+static COLORREF s_ColorDarkShadow    = RGB( 15, 15, 15 );
+static COLORREF s_ColorTooltip       = RGB( 50, 50, 52 );
+static COLORREF s_ColorHotLight      = RGB( 86, 156, 214 );
+static COLORREF s_ColorWorkspace     = RGB( 28, 28, 28 );
+static COLORREF s_ColorFrame         = RGB( 20, 20, 20 );
+static COLORREF s_ColorBorder        = RGB( 100, 100, 104 );
+
+struct PaletteKey_t
+{
+	const wchar_t	*m_pwszName;
+	COLORREF		*m_pColor;
+};
+
+static const PaletteKey_t s_PaletteKeys[] =
+{
+	{ L"Face",          &s_ColorFace },
+	{ L"Window",        &s_ColorWindow },
+	{ L"Edit",          &s_ColorEdit },
+	{ L"Text",          &s_ColorText },
+	{ L"GrayText",      &s_ColorGrayText },
+	{ L"Menu",          &s_ColorMenu },
+	{ L"MenuHot",       &s_ColorMenuHot },
+	{ L"Highlight",     &s_ColorHighlight },
+	{ L"HighlightText", &s_ColorHighlightText },
+	{ L"Light",         &s_ColorLight },
+	{ L"Hilight",       &s_ColorHilight },
+	{ L"Shadow",        &s_ColorShadow },
+	{ L"DarkShadow",    &s_ColorDarkShadow },
+	{ L"Tooltip",       &s_ColorTooltip },
+	{ L"HotLight",      &s_ColorHotLight },
+	{ L"Workspace",     &s_ColorWorkspace },
+	{ L"Frame",         &s_ColorFrame },
+	{ L"Border",        &s_ColorBorder },
+};
 
 // System color indices answered by the hooks
 struct DarkColor_t
@@ -74,6 +102,63 @@ static const DarkColor_t s_Palette[] =
 	{ COLOR_MENUHILIGHT,         &s_ColorMenuHot },
 	{ COLOR_MENUBAR,             &s_ColorMenu },
 };
+
+// "#RRGGBB" or "R,G,B"
+static bool ParseColor( const wchar_t *pwszValue, COLORREF &color )
+{
+	while ( *pwszValue == L' ' || *pwszValue == L'\t' )
+	{
+		pwszValue++;
+	}
+
+	if ( *pwszValue == L'#' )
+	{
+		wchar_t *pwszEnd = nullptr;
+		const unsigned long nValue = wcstoul( pwszValue + 1, &pwszEnd, 16 );
+		if ( pwszEnd - ( pwszValue + 1 ) != 6 )
+		{
+			return false;
+		}
+
+		color = RGB( ( nValue >> 16 ) & 0xFF, ( nValue >> 8 ) & 0xFF, nValue & 0xFF );
+		return true;
+	}
+
+	int nRed = -1;
+	int nGreen = -1;
+	int nBlue = -1;
+	if ( swscanf_s( pwszValue, L"%d , %d , %d", &nRed, &nGreen, &nBlue ) != 3 )
+	{
+		return false;
+	}
+
+	if ( nRed < 0 || nRed > 255 || nGreen < 0 || nGreen > 255 || nBlue < 0 || nBlue > 255 )
+	{
+		return false;
+	}
+
+	color = RGB( nRed, nGreen, nBlue );
+	
+	return true;
+}
+
+static void LoadPalette( const std::wstring &ini )
+{
+	for ( const PaletteKey_t &key : s_PaletteKeys )
+	{
+		wchar_t wszValue[64] = {};
+		GetPrivateProfileStringW( L"Palette", key.m_pwszName, L"", wszValue, ARRAYSIZE( wszValue ), ini.c_str() );
+		if ( !wszValue[0] )
+		{
+			continue;
+		}
+
+		if ( !ParseColor( wszValue, *key.m_pColor ) )
+		{
+			Log( "palette: %ls=%ls is not #RRGGBB or R,G,B, default kept", key.m_pwszName, wszValue );
+		}
+	}
+}
 
 static HBRUSH s_hBrushes[COLOR_MENUBAR + 1];
 static HBRUSH s_hEditBrush = nullptr;
@@ -1487,6 +1572,8 @@ void DarkTheme_Init()
 	{
 		return;
 	}
+
+	LoadPalette( ini );
 
 	HMODULE hUser32  = GetModuleHandleW( L"user32.dll" );
 	HMODULE hUxTheme = LoadLibraryExW( L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32 );
