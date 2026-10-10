@@ -6,11 +6,61 @@
 #=============================================================================#
 
 param(
-	[string] $HammerDir = ( Join-Path $PSScriptRoot '..\on-the-moon-reloaded-game\bin\x64' ),
+	# The game bin folder or bin\x64 itself; asked for when not given
+	[string] $HammerDir = '',
 	[switch] $Restore
 )
 
 $ErrorActionPreference = 'Stop'
+
+# bin or bin\x64: the folder that holds hammerplusplus.exe, empty if neither does
+function Find-HammerDir( [string] $Path )
+{
+	foreach ( $candidate in @( $Path, ( Join-Path $Path 'x64' ) ) )
+	{
+		if ( Test-Path ( Join-Path $candidate 'hammerplusplus.exe' ) )
+		{
+			$resolved = ( Resolve-Path $candidate ).Path
+			return $resolved
+		}
+	}
+
+	return ''
+}
+
+if ( $HammerDir )
+{
+	$found = Find-HammerDir $HammerDir
+	if ( -not $found )
+	{
+		throw "hammerplusplus.exe is not found in $HammerDir or $( Join-Path $HammerDir 'x64' )"
+	}
+
+	$HammerDir = $found
+}
+elseif ( [Console]::IsInputRedirected )
+{
+	throw 'Pass the game bin folder: patch.bat C:\path\to\bin'
+}
+else
+{
+	# Asked until a folder with hammerplusplus.exe is given
+	while ( -not $HammerDir )
+	{
+		# Quotes come with a folder dragged into the console
+		$answer = ( Read-Host 'Game bin folder' ).Trim().Trim( '"' )
+		if ( -not $answer )
+		{
+			continue
+		}
+
+		$HammerDir = Find-HammerDir $answer
+		if ( -not $HammerDir )
+		{
+			Write-Host "hammerplusplus.exe is not found in $answer or $( Join-Path $answer 'x64' )"
+		}
+	}
+}
 
 $exe       = Join-Path $HammerDir 'hammerplusplus.exe'
 $backup    = "$exe.orig"
@@ -111,11 +161,6 @@ function Get-Imports( [byte[]] $Bytes )
 	}
 
 	return $imports
-}
-
-if ( -not ( Test-Path $exe ) )
-{
-	throw "hammerplusplus.exe is not found in $HammerDir"
 }
 
 if ( $Restore )
