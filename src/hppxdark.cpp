@@ -1,11 +1,12 @@
 //============ Copyright 2026 Moon-6 Team, All rights reserved. ===============//
 //
 // Purpose: Hammer++ rebind of the ADVAPI32 import of hammerplusplus.exe:
-//			forwards its registry imports, appends -vulkan to the command line
-//			and preloads the OTM DXVK build
+//			forwards its registry imports, appends -vulkan to the command line,
+//			preloads the OTM DXVK build and turns on the dark theme
 //
 //=============================================================================//
 
+#include "dark_theme.h"
 #include "iat_hook.h"
 
 #include <windows.h>
@@ -76,8 +77,31 @@ static BOOL CALLBACK InitCommandLine( PINIT_ONCE, PVOID, PVOID * )
 	}
 
 	PreloadDXVK();
+	DarkTheme_Init();
 
 	return TRUE;
+}
+
+static FARPROC s_pLoadLibraryExA = nullptr;
+static FARPROC s_pLoadLibraryExW = nullptr;
+
+// Hammer++ loads hammerplusplus_dll.dll at runtime; its imports are hooked before it registers window classes
+static HMODULE WINAPI HookLoadLibraryExA( LPCSTR pszName, HANDLE hFile, DWORD nFlags )
+{
+	using LoadLibraryExA_t = HMODULE ( WINAPI * )( LPCSTR, HANDLE, DWORD );
+	HMODULE hModule = reinterpret_cast<LoadLibraryExA_t>( s_pLoadLibraryExA )( pszName, hFile, nFlags );
+	DarkTheme_OnModuleLoaded();
+
+	return hModule;
+}
+
+static HMODULE WINAPI HookLoadLibraryExW( LPCWSTR pwszName, HANDLE hFile, DWORD nFlags )
+{
+	using LoadLibraryExW_t = HMODULE ( WINAPI * )( LPCWSTR, HANDLE, DWORD );
+	HMODULE hModule = reinterpret_cast<LoadLibraryExW_t>( s_pLoadLibraryExW )( pwszName, hFile, nFlags );
+	DarkTheme_OnModuleLoaded();
+
+	return hModule;
 }
 
 static LPSTR WINAPI HookGetCommandLineA()
@@ -122,7 +146,9 @@ BOOL WINAPI DllMain( HINSTANCE hInstance, DWORD nReason, LPVOID )
 	HMODULE hKernel32  = GetModuleHandleW( L"kernel32.dll" );
 	s_pGetCommandLineA = GetProcAddress( hKernel32, "GetCommandLineA" );
 	s_pGetCommandLineW = GetProcAddress( hKernel32, "GetCommandLineW" );
-	if ( !s_pGetCommandLineA || !s_pGetCommandLineW )
+	s_pLoadLibraryExA  = GetProcAddress( hKernel32, "LoadLibraryExA" );
+	s_pLoadLibraryExW  = GetProcAddress( hKernel32, "LoadLibraryExW" );
+	if ( !s_pGetCommandLineA || !s_pGetCommandLineW || !s_pLoadLibraryExA || !s_pLoadLibraryExW )
 	{
 		return TRUE;
 	}
@@ -132,6 +158,8 @@ BOOL WINAPI DllMain( HINSTANCE hInstance, DWORD nReason, LPVOID )
 	{
 		{ s_pGetCommandLineA, reinterpret_cast<void *>( &HookGetCommandLineA ) },
 		{ s_pGetCommandLineW, reinterpret_cast<void *>( &HookGetCommandLineW ) },
+		{ s_pLoadLibraryExA,  reinterpret_cast<void *>( &HookLoadLibraryExA )  },
+		{ s_pLoadLibraryExW,  reinterpret_cast<void *>( &HookLoadLibraryExW )  },
 	};
 
 	HookImports( GetModuleHandleW( nullptr ),      hooks, ARRAYSIZE( hooks ) );

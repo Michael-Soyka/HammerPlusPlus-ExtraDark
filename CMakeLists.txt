@@ -10,14 +10,16 @@ endif ()
 set( CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" )
 
 add_library( hppxdark SHARED
+	src/dark_theme.cpp
 	src/iat_hook.cpp
+	src/log.cpp
 	src/hppxdark.cpp
 	src/hppxdark.def
 )
 
 target_compile_features( hppxdark PRIVATE cxx_std_17 )
 target_compile_options( hppxdark PRIVATE /W4 )
-target_link_libraries( hppxdark PRIVATE advapi32 user32 )
+target_link_libraries( hppxdark PRIVATE advapi32 comctl32 dwmapi user32 uxtheme )
 
 # patch.ps1 takes the DLL from bin
 set_target_properties( hppxdark PROPERTIES
