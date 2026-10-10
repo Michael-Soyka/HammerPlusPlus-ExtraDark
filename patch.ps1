@@ -70,6 +70,9 @@ $builtShim = Join-Path $PSScriptRoot 'bin\hppxdark.dll'
 $oldName = 'ADVAPI32.dll'
 $newName = 'hppxdark.dll'
 
+# Earlier names of the shim: an exe patched with them is moved to the new name
+$previousNames = @( 'otm_hpp.dll' )
+
 # Registry functions forwarded by hppxdark.def
 $forwarded = @( 'RegOpenKeyExA', 'RegQueryValueExA', 'RegCloseKey' )
 
@@ -172,9 +175,13 @@ if ( $Restore )
 
 	Copy-Item $backup $exe -Force
 	Remove-Item $backup
-	if ( Test-Path $shim )
+	foreach ( $name in @( $newName ) + $previousNames )
 	{
-		Remove-Item $shim
+		$file = Join-Path $HammerDir $name
+		if ( Test-Path $file )
+		{
+			Remove-Item $file
+		}
 	}
 
 	Write-Host "Restored $exe"
@@ -193,6 +200,22 @@ if ( $imports | Where-Object { $_.Name -ieq $newName } )
 {
 	Copy-Item $builtShim $shim -Force
 	Write-Host "Already patched, hppxdark.dll updated in $HammerDir"
+	exit 0
+}
+
+# Patched under an earlier shim name: the same import slot gets the new name
+$previous = $imports | Where-Object { $previousNames -icontains $_.Name } | Select-Object -First 1
+if ( $previous )
+{
+	$nameBytes = [Text.Encoding]::ASCII.GetBytes( $newName )
+	[Array]::Copy( $nameBytes, 0, $bytes, $previous.NameOffset, $nameBytes.Length )
+	$bytes[$previous.NameOffset + $nameBytes.Length] = 0
+
+	[IO.File]::WriteAllBytes( $exe, $bytes )
+	Copy-Item $builtShim $shim -Force
+	Remove-Item ( Join-Path $HammerDir $previous.Name )
+
+	Write-Host "Moved $exe from $( $previous.Name ) to $newName"
 	exit 0
 }
 
