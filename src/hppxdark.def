@@ -1,0 +1,5 @@
+LIBRARY hppxdark
+EXPORTS
+	RegOpenKeyExA=Shim_RegOpenKeyExA
+	RegQueryValueExA=Shim_RegQueryValueExA
+	RegCloseKey=Shim_RegCloseKey
