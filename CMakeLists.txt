@@ -6,6 +6,10 @@ if ( NOT CMAKE_SIZEOF_VOID_P EQUAL 8 )
 	message( FATAL_ERROR "Hammer++ is 64-bit, configure for x64" )
 endif ()
 
+# On: Hammer++ runs on the On The Moon DXVK build from ..\..\otm\bin\x64 (OTM shaders in the
+# editor). Off: on Valve's DXVK from bin\x64, for Hammer++ outside On The Moon
+option( OTM_BUILD "Build for On The Moon: load its DXVK build" OFF )
+
 # Static CRT: the shim loads before anything else in hammerplusplus.exe
 set( CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" )
 
@@ -29,6 +33,10 @@ endforeach ()
 
 file( GENERATE OUTPUT "${CMAKE_BINARY_DIR}/hppxdark_assets.rc" CONTENT "${HPPXDARK_RC}" )
 target_sources( hppxdark PRIVATE "${CMAKE_BINARY_DIR}/hppxdark_assets.rc" )
+
+if ( OTM_BUILD )
+	target_compile_definitions( hppxdark PRIVATE OTM_BUILD )
+endif ()
 
 target_compile_features( hppxdark PRIVATE cxx_std_17 )
 target_compile_options( hppxdark PRIVATE /W4 )

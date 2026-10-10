@@ -2,19 +2,23 @@
 //
 // Purpose: Hammer++ rebind of the ADVAPI32 import of hammerplusplus.exe:
 //			forwards its registry imports, appends -vulkan to the command line,
-//			preloads the OTM DXVK build and turns on the dark theme
+//			preloads the OTM DXVK build (OTM_BUILD, else Valve's DXVK from bin/x64
+//			is used) and turns on the dark theme
 //
 //=============================================================================//
 
 #include "dark_theme.h"
 #include "iat_hook.h"
+#include "log.h"
 
 #include <windows.h>
 
 #include <string>
 
-// Relative to the folder of hammerplusplus.exe
-static const wchar_t *const s_pwszDXVK = L"..\\..\\otm\\bin\\x64\\dxvk_d3d9.dll";
+#ifdef OTM_BUILD
+	//will use our's dxvk build d
+	static const wchar_t *const s_pwszDXVK = L"..\\..\\otm\\bin\\x64\\dxvk_d3d9.dll";
+#endif
 
 static FARPROC s_pGetCommandLineA = nullptr;
 static FARPROC s_pGetCommandLineW = nullptr;
@@ -36,26 +40,28 @@ static bool HasVulkanArg( const wchar_t *pwszCommandLine )
 	return bFound;
 }
 
-// Loaded before the engine asks for dxvk_d3d9.dll by name, which then gets this module
-static void PreloadDXVK()
-{
-	wchar_t wszPath[ MAX_PATH ];
-	const DWORD nLen = GetModuleFileNameW( nullptr, wszPath, MAX_PATH );
-	if ( !nLen || nLen == MAX_PATH )
+#ifdef OTM_BUILD
+	// Loaded before the engine asks for dxvk_d3d9.dll by name, which then gets this module
+	static void PreloadDXVK()
 	{
-		return;
-	}
+		wchar_t wszPath[ MAX_PATH ];
+		const DWORD nLen = GetModuleFileNameW( nullptr, wszPath, MAX_PATH );
+		if ( !nLen || nLen == MAX_PATH )
+		{
+			return;
+		}
 
-	std::wstring path = wszPath;
-	path.resize( path.find_last_of( L'\\' ) + 1 );
-	path += s_pwszDXVK;
+		std::wstring path = wszPath;
+		path.resize( path.find_last_of( L'\\' ) + 1 );
+		path += s_pwszDXVK;
 
-	if ( !LoadLibraryExW( path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH ) )
-	{
-		std::wstring message = L"Failed to load the OTM DXVK build, OTM shaders fall back:\n\n" + path;
-		MessageBoxW( nullptr, message.c_str(), L"hppxdark", MB_OK | MB_ICONWARNING );
+		if ( !LoadLibraryExW( path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH ) )
+		{
+			std::wstring message = L"Failed to load the OTM DXVK build, OTM shaders fall back:\n\n" + path;
+			MessageBoxW( nullptr, message.c_str(), L"hppxdark", MB_OK | MB_ICONWARNING );
+		}
 	}
-}
+#endif
 
 // Runs on the first command line request: CRT startup, outside the loader lock
 static BOOL CALLBACK InitCommandLine( PINIT_ONCE, PVOID, PVOID * )
@@ -63,8 +69,12 @@ static BOOL CALLBACK InitCommandLine( PINIT_ONCE, PVOID, PVOID * )
 	using GetCommandLineW_t = LPWSTR ( WINAPI * )();
 	const wchar_t *pwszOriginal = reinterpret_cast<GetCommandLineW_t>( s_pGetCommandLineW )();
 
+	// [ForceVulkan] Enabled=0 leaves the command line as is: Direct3D 9 unless -vulkan is passed
+	const bool bForceVulkan = GetPrivateProfileIntW( L"ForceVulkan", L"Enabled", 1, ModuleFilePath( L"hppxdark.ini" ).c_str() ) != 0;
+	const bool bVulkanArg   = HasVulkanArg( pwszOriginal );
+
 	s_CommandLineW = pwszOriginal;
-	if ( !HasVulkanArg( pwszOriginal ) )
+	if ( bForceVulkan && !bVulkanArg )
 	{
 		s_CommandLineW += L" -vulkan";
 	}
@@ -76,7 +86,13 @@ static BOOL CALLBACK InitCommandLine( PINIT_ONCE, PVOID, PVOID * )
 		WideCharToMultiByte( CP_ACP, 0, s_CommandLineW.c_str(), -1, s_CommandLineA.data(), nSize, nullptr, nullptr );
 	}
 
-	PreloadDXVK();
+	#ifdef OTM_BUILD
+		if ( bForceVulkan || bVulkanArg )
+		{
+			PreloadDXVK();
+		}
+	#endif
+
 	DarkTheme_Init();
 
 	return TRUE;
