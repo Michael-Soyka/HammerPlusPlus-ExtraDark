@@ -12,10 +12,23 @@ set( CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" )
 add_library( hppxdark SHARED
 	src/dark_theme.cpp
 	src/iat_hook.cpp
+	src/icons.cpp
 	src/log.cpp
 	src/hppxdark.cpp
 	src/hppxdark.def
 )
+
+# src/assets/Bitmap<id>.bmp become bitmap resources <id>, replacing the Hammer++ ones
+file( GLOB HPPXDARK_ASSETS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/assets/Bitmap*.bmp" )
+set( HPPXDARK_RC "" )
+foreach( ASSET ${HPPXDARK_ASSETS} )
+	get_filename_component( ASSET_NAME "${ASSET}" NAME_WE )
+	string( REGEX REPLACE "^Bitmap" "" ASSET_ID "${ASSET_NAME}" )
+	string( APPEND HPPXDARK_RC "${ASSET_ID} BITMAP \"${ASSET}\"\n" )
+endforeach ()
+
+file( GENERATE OUTPUT "${CMAKE_BINARY_DIR}/hppxdark_assets.rc" CONTENT "${HPPXDARK_RC}" )
+target_sources( hppxdark PRIVATE "${CMAKE_BINARY_DIR}/hppxdark_assets.rc" )
 
 target_compile_features( hppxdark PRIVATE cxx_std_17 )
 target_compile_options( hppxdark PRIVATE /W4 )

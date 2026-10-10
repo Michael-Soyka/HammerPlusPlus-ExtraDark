@@ -6,6 +6,7 @@
 
 #include "dark_theme.h"
 #include "iat_hook.h"
+#include "icons.h"
 #include "log.h"
 
 #include <windows.h>
@@ -312,7 +313,8 @@ static VOID CALLBACK OnDllNotification( ULONG nReason, const LdrDllLoaded_t *pDa
 	// Under the loader lock: only the import tables are written
 	HMODULE hHammer = static_cast<HMODULE>( pData->m_pBase );
 	const int nReplaced = HookImports( hHammer, s_ColorHooks, ARRAYSIZE( s_ColorHooks ) );
-	Log( "load notification %ls: %d imports", name.c_str(), nReplaced );
+	const int nIcons = Icons_HookModule( hHammer );
+	Log( "load notification %ls: %d color imports, %d resource imports", name.c_str(), nReplaced, nIcons );
 }
 
 static void RegisterDllNotification()
@@ -1512,6 +1514,7 @@ void DarkTheme_Init()
 	s_ColorHooks[ 6 ] = { s_pMessageBoxIndirectW, reinterpret_cast<void *>( &HookMessageBoxIndirectW ) };
 
 	InitDarkMode();
+	Icons_Init();
 	RegisterDllNotification();
 	HookLoadedModules();
 
