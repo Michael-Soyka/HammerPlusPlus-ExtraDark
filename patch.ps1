@@ -6,11 +6,61 @@
 #=============================================================================#
 
 param(
-	[string] $HammerDir = ( Join-Path $PSScriptRoot '..\on-the-moon-reloaded-game\bin\x64' ),
+	# The game bin folder or bin\x64 itself; asked for when not given
+	[string] $HammerDir = '',
 	[switch] $Restore
 )
 
 $ErrorActionPreference = 'Stop'
+
+# bin or bin\x64: the folder that holds hammerplusplus.exe, empty if neither does
+function Find-HammerDir( [string] $Path )
+{
+	foreach ( $candidate in @( $Path, ( Join-Path $Path 'x64' ) ) )
+	{
+		if ( Test-Path ( Join-Path $candidate 'hammerplusplus.exe' ) )
+		{
+			$resolved = ( Resolve-Path $candidate ).Path
+			return $resolved
+		}
+	}
+
+	return ''
+}
+
+if ( $HammerDir )
+{
+	$found = Find-HammerDir $HammerDir
+	if ( -not $found )
+	{
+		throw "hammerplusplus.exe is not found in $HammerDir or $( Join-Path $HammerDir 'x64' )"
+	}
+
+	$HammerDir = $found
+}
+elseif ( [Console]::IsInputRedirected )
+{
+	throw 'Pass the game bin folder: patch.bat C:\path\to\bin'
+}
+else
+{
+	# Asked until a folder with hammerplusplus.exe is given
+	while ( -not $HammerDir )
+	{
+		# Quotes come with a folder dragged into the console
+		$answer = ( Read-Host 'Game bin folder' ).Trim().Trim( '"' )
+		if ( -not $answer )
+		{
+			continue
+		}
+
+		$HammerDir = Find-HammerDir $answer
+		if ( -not $HammerDir )
+		{
+			Write-Host "hammerplusplus.exe is not found in $answer or $( Join-Path $answer 'x64' )"
+		}
+	}
+}
 
 $exe       = Join-Path $HammerDir 'hammerplusplus.exe'
 $backup    = "$exe.orig"
@@ -19,6 +69,9 @@ $builtShim = Join-Path $PSScriptRoot 'bin\hppxdark.dll'
 
 $oldName = 'ADVAPI32.dll'
 $newName = 'hppxdark.dll'
+
+# Earlier names of the shim: an exe patched with them is moved to the new name
+$previousNames = @( 'otm_hpp.dll' )
 
 # Registry functions forwarded by hppxdark.def
 $forwarded = @( 'RegOpenKeyExA', 'RegQueryValueExA', 'RegCloseKey' )
@@ -113,11 +166,6 @@ function Get-Imports( [byte[]] $Bytes )
 	return $imports
 }
 
-if ( -not ( Test-Path $exe ) )
-{
-	throw "hammerplusplus.exe is not found in $HammerDir"
-}
-
 if ( $Restore )
 {
 	if ( -not ( Test-Path $backup ) )
@@ -127,9 +175,13 @@ if ( $Restore )
 
 	Copy-Item $backup $exe -Force
 	Remove-Item $backup
-	if ( Test-Path $shim )
+	foreach ( $name in @( $newName ) + $previousNames )
 	{
-		Remove-Item $shim
+		$file = Join-Path $HammerDir $name
+		if ( Test-Path $file )
+		{
+			Remove-Item $file
+		}
 	}
 
 	Write-Host "Restored $exe"
@@ -148,6 +200,22 @@ if ( $imports | Where-Object { $_.Name -ieq $newName } )
 {
 	Copy-Item $builtShim $shim -Force
 	Write-Host "Already patched, hppxdark.dll updated in $HammerDir"
+	exit 0
+}
+
+# Patched under an earlier shim name: the same import slot gets the new name
+$previous = $imports | Where-Object { $previousNames -icontains $_.Name } | Select-Object -First 1
+if ( $previous )
+{
+	$nameBytes = [Text.Encoding]::ASCII.GetBytes( $newName )
+	[Array]::Copy( $nameBytes, 0, $bytes, $previous.NameOffset, $nameBytes.Length )
+	$bytes[$previous.NameOffset + $nameBytes.Length] = 0
+
+	[IO.File]::WriteAllBytes( $exe, $bytes )
+	Copy-Item $builtShim $shim -Force
+	Remove-Item ( Join-Path $HammerDir $previous.Name )
+
+	Write-Host "Moved $exe from $( $previous.Name ) to $newName"
 	exit 0
 }
 

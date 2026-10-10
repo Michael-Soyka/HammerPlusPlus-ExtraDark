@@ -10,6 +10,9 @@ endif ()
 # editor). Off: on Valve's DXVK from bin\x64, for Hammer++ outside On The Moon
 option( OTM_BUILD "Build for On The Moon: load its DXVK build" OFF )
 
+# On: hppxdark.log next to the DLL. Off: logging is compiled out
+option( HPPXDARK_LOG "Write hppxdark.log next to the DLL" OFF )
+
 # Static CRT: the shim loads before anything else in hammerplusplus.exe
 set( CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" )
 
@@ -36,6 +39,10 @@ target_sources( hppxdark PRIVATE "${CMAKE_BINARY_DIR}/hppxdark_assets.rc" )
 
 if ( OTM_BUILD )
 	target_compile_definitions( hppxdark PRIVATE OTM_BUILD )
+endif ()
+
+if ( HPPXDARK_LOG )
+	target_compile_definitions( hppxdark PRIVATE HPPXDARK_LOG )
 endif ()
 
 target_compile_features( hppxdark PRIVATE cxx_std_17 )
