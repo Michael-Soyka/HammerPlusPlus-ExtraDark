@@ -1,0 +1,41 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        include:
+          - name: hppxdark
+            otm: OFF
+          - name: hppxdark-otm
+            otm: ON
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -A x64 -DOTM_BUILD=${{ matrix.otm }}
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      # Same layout as the repository: patch.ps1 takes the DLL from bin
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            bin/hppxdark.dll
+            patch.ps1
+            patch.bat
+            README.md
+            README_ru.md
+            LICENSE
+          if-no-files-found: error
