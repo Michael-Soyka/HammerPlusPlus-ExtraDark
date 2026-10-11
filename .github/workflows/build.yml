@@ -5,6 +5,10 @@ on:
     branches: [ master ]
   workflow_dispatch:
 
+# The release job creates a tag and a release
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -12,9 +16,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: hppxdark
+          - name: HammerPlusPlus-ExtraDark
             otm: OFF
-          - name: hppxdark-otm
+          - name: HammerPlusPlus-ExtraDark-OTM
             otm: ON
 
     steps:
@@ -39,3 +43,36 @@ jobs:
             README_ru.md
             LICENSE
           if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Timestamp
+        id: stamp
+        run: echo "value=$(date -u +%Y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - name: Download
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # One zip per build variant: <artifact name>-<timestamp>.zip
+      - name: Pack
+        run: |
+          mkdir release
+          for dir in artifacts/*/; do
+            name="$( basename "$dir" )"
+            ( cd "$dir" && zip -r -q "../../release/${name}-${{ steps.stamp.outputs.value }}.zip" . )
+          done
+          ls -l release
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: HammerPlusPlus-ExtraDark-${{ steps.stamp.outputs.value }}
+          name: HammerPlusPlus-ExtraDark-${{ steps.stamp.outputs.value }}
+          target_commitish: ${{ github.sha }}
+          files: release/*.zip
+          fail_on_unmatched_files: true
