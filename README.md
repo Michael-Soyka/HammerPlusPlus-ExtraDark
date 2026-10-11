@@ -1,5 +1,8 @@
 # Hammer++ extra dark patcher
 
+<img width="2560" height="1408" alt="image" src="https://github.com/user-attachments/assets/f98d41db-e120-4fe8-b169-d3a134540dab" />
+<p align="center">Hammer++ - dark theme</p>
+
 Our in-house patcher for [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/).
 
 English Version | [Русская версия](README_ru.md)
