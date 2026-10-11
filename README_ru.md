@@ -30,7 +30,7 @@ patch.bat C:\path\to\bin (-Restore)
 
 ```ini
 [ForceVulkan]
-Enabled=1    ; 0 - D3D9 / 1 - auto -vulkan
+Enabled=1    ; 0 - D3D9 (по умолчанию) / 1 - auto -vulkan
 
 [DarkTheme]
 Enabled=1    ; 0 - light theme / 1 - custom dark theme

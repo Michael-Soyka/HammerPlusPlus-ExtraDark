@@ -69,8 +69,9 @@ static BOOL CALLBACK InitCommandLine( PINIT_ONCE, PVOID, PVOID * )
 	using GetCommandLineW_t = LPWSTR ( WINAPI * )();
 	const wchar_t *pwszOriginal = reinterpret_cast<GetCommandLineW_t>( s_pGetCommandLineW )();
 
-	// [ForceVulkan] Enabled=0 leaves the command line as is: Direct3D 9 unless -vulkan is passed
-	const bool bForceVulkan = GetPrivateProfileIntW( L"ForceVulkan", L"Enabled", 1, ModuleFilePath( L"hppxdark.ini" ).c_str() ) != 0;
+	// Off by default: the command line stays as is, Direct3D 9 unless -vulkan is passed or
+	// [ForceVulkan] Enabled=1
+	const bool bForceVulkan = GetPrivateProfileIntW( L"ForceVulkan", L"Enabled", 0, ModuleFilePath( L"hppxdark.ini" ).c_str() ) != 0;
 	const bool bVulkanArg   = HasVulkanArg( pwszOriginal );
 
 	s_CommandLineW = pwszOriginal;
