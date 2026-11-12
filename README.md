@@ -14,19 +14,11 @@ What it does:
 
 **Hammer++ must be closed.**
 
-To install the patch, run **patch.bat** (unpack the release first if you downloaded one).
+Run **hppxdark_setup.exe** (unpack the release first): enter the game `bin` folder, pick it with **Browse...** or drop it on the window, then press **Patch**. On a patched Hammer++ there are three buttons instead: **Remove** brings back the original, **Repatch** writes `hppxdark.dll` again (named **Update** when the installed one is outdated), **Launch** starts Hammer++.
 
-To restore the original, open a terminal in the patcher folder and run:
-```
-patch.bat -Restore
-```
+The window also shows the installed version next to the installer's one and whether it is outdated.
 
-Alternatively, from a terminal:
-```
-patch.bat C:\path\to\bin (-Restore)
-```
-
-The patcher finds `hammerplusplus.exe` in `bin`, `bin\x64` or `bin\win64` and patches `hammerplusplus\bin\hammerplusplus_dll.dll` (the original is saved as `hammerplusplus_dll.dll.orig`). An install made by an earlier version of the patcher (a patched `hammerplusplus.exe`) is rolled back automatically.
+The installer finds `hammerplusplus.exe` in `bin`, `bin\x64` or `bin\win64` and patches `hammerplusplus\bin\hammerplusplus_dll.dll` (the original is saved as `hammerplusplus_dll.dll.orig`). An install made by an earlier version of the patcher (a patched `hammerplusplus.exe`) is rolled back automatically.
 
 ## Configuration
 
@@ -80,15 +72,19 @@ Text=220,220,220
 
 ## Building
 
-The patcher takes the DLL of the same bitness as Hammer++: `bin\x64\hppxdark.dll` or `bin\x86\hppxdark.dll`.
-
 ```
-cmake -B build-x64 -A x64
-cmake --build build-x64 --config Release
-
-cmake -B build-x86 -A Win32
-cmake --build build-x86 --config Release
+cmake -B build -A x64
+cmake --build build --config Release
 ```
+
+The result is `bin\hppxdark_setup.exe` with both proxy DLLs inside: the x64 configuration builds the x86 `hppxdark.dll` as a nested Win32 configuration. 
+## Versions
+
+`MAJOR.MINOR.BUILD.REVISION`, written on every build by `cmake/version.cmake`:
+- `MAJOR.MINOR` is set by hand in `project( hppxdark VERSION ... )` of `CMakeLists.txt`;
+- `BUILD` is the number of days since 2000-01-01, `REVISION` the seconds since midnight divided by 2 (UTC), the same scheme as .NET `1.0.*` versions.
+
+A later build always has a bigger version, the installer and both DLLs of one build share it. GitHub Actions builds add `-git` to the text version (`1.0.9812.38990-git`); the comparison goes by the numbers. The version goes to the version resource of `hppxdark.dll` and `hppxdark_setup.exe` (Properties - Details in Explorer); the installer compares the installed `hppxdark.dll` with its own.
 
 CMake options:
 - `HPPXDARK_LOG` - process logging, off by default.
