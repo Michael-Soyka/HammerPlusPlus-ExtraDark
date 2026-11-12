@@ -14,6 +14,7 @@
 #include <dwmapi.h>
 #include <psapi.h>
 #include <uxtheme.h>
+#include <vssym32.h>
 
 #include <string>
 
@@ -511,15 +512,14 @@ static void ApplyWindowTheme( HWND hWnd )
 	}
 	else if ( className == WC_BUTTONW )
 	{
-		// Themed check boxes, radio buttons and group boxes ignore WM_CTLCOLORBTN text colors;
-		// push-like ones look like push buttons
-		const LONG_PTR nType = nStyle & BS_TYPEMASK;
-		const bool bPush = nType == BS_PUSHBUTTON || nType == BS_DEFPUSHBUTTON || nType == BS_SPLITBUTTON || nType == BS_DEFSPLITBUTTON || ( nStyle & BS_PUSHLIKE );
-		SetWindowTheme( hWnd, bPush ? L"DarkMode_Explorer" : L"", bPush ? nullptr : L"" );
+		// Check box and radio glyphs come from the theme, their captions and the group boxes
+		// are painted here
+		SetWindowTheme( hWnd, L"DarkMode_Explorer", nullptr );
 	}
 	else if ( className == TOOLBARCLASSNAMEW || className == STATUSCLASSNAMEW || className == REBARCLASSNAMEW || className == WC_TABCONTROLW || className == UPDOWN_CLASSW )
 	{
-		// No dark theme classes for these: classic drawing takes the hooked system colors
+		// No dark theme classes for these: classic drawing takes the hooked system colors,
+		// toolbar buttons and up-down controls are painted flat here
 		SetWindowTheme( hWnd, L"", L"" );
 	}
 	else if ( className == WC_SCROLLBARW || ( nStyle & ( WS_VSCROLL | WS_HSCROLL ) ) )
@@ -1226,6 +1226,297 @@ static void PaintGroupBox( HWND hWnd )
 	EndPaint( hWnd, &paint );
 }
 
+static bool IsCheckButton( HWND hWnd )
+{
+	const LONG_PTR nStyle = GetWindowLongPtrW( hWnd, GWL_STYLE );
+	const LONG_PTR nType = nStyle & BS_TYPEMASK;
+	const bool bType = nType == BS_CHECKBOX || nType == BS_AUTOCHECKBOX || nType == BS_3STATE || nType == BS_AUTO3STATE || nType == BS_RADIOBUTTON || nType == BS_AUTORADIOBUTTON;
+	const bool bCheck = bType && !( nStyle & ( BS_PUSHLIKE | BS_BITMAP | BS_ICON ) ) && IsClass( hWnd, WC_BUTTONW );
+
+	return bCheck;
+}
+
+// Check box and radio button: the glyph from the dark theme, the caption in the dark text color
+// that the themed drawing ignores. Drawn off screen in one go, no flicker
+static void PaintCheckButton( HWND hWnd, HDC hTarget )
+{
+	RECT client;
+	GetClientRect( hWnd, &client );
+	if ( client.right <= 0 || client.bottom <= 0 )
+	{
+		return;
+	}
+
+	HDC hDC = CreateCompatibleDC( hTarget );
+	HBITMAP hBitmap = CreateCompatibleBitmap( hTarget, client.right, client.bottom );
+	HGDIOBJ hOldBitmap = SelectObject( hDC, hBitmap );
+
+	HWND hParent = GetParent( hWnd );
+	HBRUSH hBrush = hParent ? reinterpret_cast<HBRUSH>( SendMessageW( hParent, WM_CTLCOLORSTATIC, reinterpret_cast<WPARAM>( hDC ), reinterpret_cast<LPARAM>( hWnd ) ) ) : nullptr;
+	FillRect( hDC, &client, IsSystemBrush( hBrush ) ? DarkBrush( COLOR_BTNFACE ) : hBrush );
+
+	HFONT hFont = reinterpret_cast<HFONT>( SendMessageW( hWnd, WM_GETFONT, 0, 0 ) );
+	HGDIOBJ hOldFont = hFont ? SelectObject( hDC, hFont ) : nullptr;
+
+	const LONG_PTR nStyle = GetWindowLongPtrW( hWnd, GWL_STYLE );
+	const LONG_PTR nType = nStyle & BS_TYPEMASK;
+	const bool bRadio = nType == BS_RADIOBUTTON || nType == BS_AUTORADIOBUTTON;
+	const bool bEnabled = IsWindowEnabled( hWnd );
+	const LRESULT nState = SendMessageW( hWnd, BM_GETSTATE, 0, 0 );
+	const LRESULT nUiState = SendMessageW( hWnd, WM_QUERYUISTATE, 0, 0 );
+
+	// Part states go in fours: normal, hot, pressed, disabled; unchecked, checked, mixed
+	int nLook = 0;
+	if ( !bEnabled )
+	{
+		nLook = 3;
+	}
+	else if ( nState & BST_PUSHED )
+	{
+		nLook = 2;
+	}
+	else if ( nState & BST_HOT )
+	{
+		nLook = 1;
+	}
+
+	const int nCheck = ( nState & BST_CHECKED ) ? 1 : ( ( nState & BST_INDETERMINATE ) ? 2 : 0 );
+	const int nPart = bRadio ? BP_RADIOBUTTON : BP_CHECKBOX;
+	const int nPartState = ( nCheck * 4 ) + nLook + 1;
+
+	HTHEME hTheme = OpenThemeData( hWnd, L"Button" );
+	SIZE glyph = { 13, 13 };
+	if ( hTheme )
+	{
+		GetThemePartSize( hTheme, hDC, nPart, nPartState, nullptr, TS_DRAW, &glyph );
+	}
+
+	const LONG_PTR nVertical = nStyle & BS_VCENTER;
+	const bool bLeftText = !!( nStyle & BS_LEFTTEXT );
+
+	RECT box;
+	box.left = bLeftText ? client.right - glyph.cx : 0;
+	box.right = box.left + glyph.cx;
+	box.top = nVertical == BS_TOP ? 0 : ( nVertical == BS_BOTTOM ? client.bottom - glyph.cy : ( client.bottom - glyph.cy ) / 2 );
+	box.bottom = box.top + glyph.cy;
+
+	if ( hTheme )
+	{
+		DrawThemeBackground( hTheme, hDC, nPart, nPartState, &box, nullptr );
+		CloseThemeData( hTheme );
+	}
+	else
+	{
+		const UINT nFrame = ( bRadio ? DFCS_BUTTONRADIO : DFCS_BUTTONCHECK ) | ( nCheck ? DFCS_CHECKED : 0 ) | ( bEnabled ? 0 : DFCS_INACTIVE );
+		DrawFrameControl( hDC, &box, DFC_BUTTON, nFrame );
+	}
+
+	wchar_t wszText[256] = {};
+	const int nLength = GetWindowTextW( hWnd, wszText, ARRAYSIZE( wszText ) );
+	if ( nLength )
+	{
+		const int nGap = glyph.cx / 3;
+		RECT text = client;
+		if ( bLeftText )
+		{
+			text.right = box.left - nGap;
+		}
+		else
+		{
+			text.left = box.right + nGap;
+		}
+
+		const LONG_PTR nHorizontal = nStyle & BS_CENTER;
+		UINT nFormat = ( nStyle & BS_MULTILINE ) ? DT_WORDBREAK : DT_SINGLELINE;
+		nFormat |= nHorizontal == BS_CENTER ? DT_CENTER : ( nHorizontal == BS_RIGHT ? DT_RIGHT : DT_LEFT );
+		nFormat |= ( nUiState & UISF_HIDEACCEL ) ? DT_HIDEPREFIX : 0;
+
+		RECT bounds = text;
+		DrawTextW( hDC, wszText, nLength, &bounds, nFormat | DT_CALCRECT );
+		const LONG nTextHeight = bounds.bottom - bounds.top;
+		const LONG nTextWidth = bounds.right - bounds.left;
+
+		text.top = nVertical == BS_TOP ? 0 : ( nVertical == BS_BOTTOM ? client.bottom - nTextHeight : ( client.bottom - nTextHeight ) / 2 );
+		text.bottom = text.top + nTextHeight;
+
+		SetBkMode( hDC, TRANSPARENT );
+		SetTextColor( hDC, bEnabled ? s_ColorText : s_ColorGrayText );
+		DrawTextW( hDC, wszText, nLength, &text, nFormat );
+
+		if ( ( nState & BST_FOCUS ) && !( nUiState & UISF_HIDEFOCUS ) )
+		{
+			RECT focus = text;
+			if ( nFormat & DT_CENTER )
+			{
+				focus.left += ( text.right - text.left - nTextWidth ) / 2;
+			}
+			else if ( nFormat & DT_RIGHT )
+			{
+				focus.left = text.right - nTextWidth;
+			}
+
+			focus.right = focus.left + nTextWidth;
+			InflateRect( &focus, 1, 0 );
+			SetTextColor( hDC, s_ColorText );
+			SetBkColor( hDC, RGB( 0, 0, 0 ) );
+			DrawFocusRect( hDC, &focus );
+		}
+	}
+
+	BitBlt( hTarget, 0, 0, client.right, client.bottom, hDC, 0, 0, SRCCOPY );
+
+	if ( hOldFont )
+	{
+		SelectObject( hDC, hOldFont );
+	}
+
+	SelectObject( hDC, hOldBitmap );
+	DeleteObject( hBitmap );
+	DeleteDC( hDC );
+}
+
+// The button draws its state changes straight to the screen, past WM_PAINT: painted again after them
+static void RepaintCheckButton( HWND hWnd )
+{
+	// A click can close the dialog
+	if ( !IsWindow( hWnd ) || !IsWindowVisible( hWnd ) )
+	{
+		return;
+	}
+
+	HDC hDC = GetDC( hWnd );
+	PaintCheckButton( hWnd, hDC );
+	ReleaseDC( hWnd, hDC );
+}
+
+// Up-down control flat like the inputs: 1 px border, the half under the mouse lighter,
+// the pressed one lighter still
+static void PaintUpDown( HWND hWnd )
+{
+	if ( !s_hBorderBrush )
+	{
+		s_hBorderBrush = CreateSolidBrush( s_ColorBorder );
+	}
+
+	PAINTSTRUCT paint;
+	HDC hDC = BeginPaint( hWnd, &paint );
+
+	RECT client;
+	GetClientRect( hWnd, &client );
+
+	const bool bHorizontal = !!( GetWindowLongPtrW( hWnd, GWL_STYLE ) & UDS_HORZ );
+	const bool bEnabled = IsWindowEnabled( hWnd );
+	const bool bCaptured = GetCapture() == hWnd;
+
+	POINT cursor;
+	GetCursorPos( &cursor );
+	const bool bOver = WindowFromPoint( cursor ) == hWnd;
+	ScreenToClient( hWnd, &cursor );
+
+	// First half: up or left, second: down or right
+	RECT halves[2] = { client, client };
+	if ( bHorizontal )
+	{
+		halves[0].right = client.right / 2;
+		halves[1].left = halves[0].right;
+	}
+	else
+	{
+		halves[0].bottom = client.bottom / 2;
+		halves[1].top = halves[0].bottom;
+	}
+
+	const int nSaved = SaveDC( hDC );
+	SelectObject( hDC, GetStockObject( DC_BRUSH ) );
+	SelectObject( hDC, GetStockObject( DC_PEN ) );
+
+	for ( int i = 0; i < 2; i++ )
+	{
+		const RECT &half = halves[i];
+		const bool bHot = bEnabled && ( bOver || bCaptured ) && PtInRect( &half, cursor );
+		COLORREF fill = s_ColorFace;
+		if ( bHot )
+		{
+			fill = bCaptured ? s_ColorHilight : s_ColorMenuHot;
+		}
+
+		SetDCBrushColor( hDC, fill );
+		FillRect( hDC, &half, static_cast<HBRUSH>( GetStockObject( DC_BRUSH ) ) );
+
+		const COLORREF arrow = bEnabled ? s_ColorText : s_ColorGrayText;
+		SetDCBrushColor( hDC, arrow );
+		SetDCPenColor( hDC, arrow );
+
+		const LONG nX = ( half.left + half.right ) / 2;
+		const LONG nY = ( half.top + half.bottom ) / 2;
+		const LONG nSize = max( 2L, min( half.right - half.left, half.bottom - half.top ) / 4 );
+		POINT points[3];
+		if ( bHorizontal )
+		{
+			const LONG nTip = i == 0 ? nX - ( nSize / 2 ) : nX + ( nSize / 2 );
+			const LONG nBase = i == 0 ? nX + ( nSize / 2 ) : nX - ( nSize / 2 );
+			points[0] = { nTip, nY };
+			points[1] = { nBase, nY - nSize };
+			points[2] = { nBase, nY + nSize };
+		}
+		else
+		{
+			const LONG nTip = i == 0 ? nY - ( nSize / 2 ) : nY + ( nSize / 2 );
+			const LONG nBase = i == 0 ? nY + ( nSize / 2 ) : nY - ( nSize / 2 );
+			points[0] = { nX, nTip };
+			points[1] = { nX - nSize, nBase };
+			points[2] = { nX + nSize, nBase };
+		}
+
+		Polygon( hDC, points, 3 );
+	}
+
+	RestoreDC( hDC, nSaved );
+
+	FrameRect( hDC, &client, s_hBorderBrush );
+	RECT divider = bHorizontal ? RECT{ halves[1].left, client.top, halves[1].left + 1, client.bottom } : RECT{ client.left, halves[1].top, client.right, halves[1].top + 1 };
+	FillRect( hDC, &divider, s_hBorderBrush );
+
+	EndPaint( hWnd, &paint );
+}
+
+// Toolbar buttons flat: no 3D edges, a rounded fill under the hot, pressed and checked ones
+static LRESULT ToolbarCustomDraw( NMTBCUSTOMDRAW *pDraw )
+{
+	if ( pDraw->nmcd.dwDrawStage == CDDS_PREPAINT )
+	{
+		return CDRF_NOTIFYITEMDRAW;
+	}
+
+	if ( pDraw->nmcd.dwDrawStage != CDDS_ITEMPREPAINT )
+	{
+		return CDRF_DODEFAULT;
+	}
+
+	const UINT nState = pDraw->nmcd.uItemState;
+	const bool bEnabled = !( nState & CDIS_DISABLED );
+	const bool bDown = !!( nState & ( CDIS_SELECTED | CDIS_CHECKED ) );
+	if ( bEnabled && ( bDown || ( nState & CDIS_HOT ) ) )
+	{
+		const COLORREF fill = bDown ? s_ColorHilight : s_ColorMenuHot;
+		const RECT &rect = pDraw->nmcd.rc;
+		HDC hDC = pDraw->nmcd.hdc;
+
+		const int nSaved = SaveDC( hDC );
+		SelectObject( hDC, GetStockObject( DC_BRUSH ) );
+		SelectObject( hDC, GetStockObject( DC_PEN ) );
+		SetDCBrushColor( hDC, fill );
+		SetDCPenColor( hDC, fill );
+		RoundRect( hDC, rect.left, rect.top, rect.right, rect.bottom, 6, 6 );
+		RestoreDC( hDC, nSaved );
+	}
+
+	pDraw->clrText = bEnabled ? s_ColorText : s_ColorGrayText;
+
+	const LRESULT nResult = TBCDRF_NOEDGES | TBCDRF_NOOFFSET | TBCDRF_NOBACKGROUND | TBCDRF_NOMARK | TBCDRF_NOETCHEDEFFECT;
+	return nResult;
+}
+
 // Property sheet pages get the light tab texture from comctl32, which also answers WM_CTLCOLOR*
 // of their controls with its own brush. Child dialogs drop it to take the dark colors
 static RECT ChildRect( HWND hParent, HWND hChild )
@@ -1375,7 +1666,7 @@ static LRESULT CALLBACK DarkSubclassProc( HWND hWnd, UINT nMsg, WPARAM wParam, L
 		case WM_ERASEBKGND:
 		{
 			// Painted whole in WM_PAINT
-			if ( IsClass( hWnd, WC_TABCONTROLW ) )
+			if ( IsClass( hWnd, WC_TABCONTROLW ) || IsClass( hWnd, UPDOWN_CLASSW ) || IsCheckButton( hWnd ) )
 			{
 				return TRUE;
 			}
@@ -1425,10 +1716,87 @@ static LRESULT CALLBACK DarkSubclassProc( HWND hWnd, UINT nMsg, WPARAM wParam, L
 
 				return 0;
 			}
+			else if ( IsCheckButton( hWnd ) )
+			{
+				PAINTSTRUCT paint;
+				HDC hDC = BeginPaint( hWnd, &paint );
+				PaintCheckButton( hWnd, hDC );
+				EndPaint( hWnd, &paint );
+
+				return 0;
+			}
+			else if ( IsClass( hWnd, UPDOWN_CLASSW ) )
+			{
+				PaintUpDown( hWnd );
+
+				return 0;
+			}
 			else if ( IsClass( hWnd, STATUSCLASSNAMEW ) )
 			{
 				const LRESULT nResult = DefSubclassProc( hWnd, nMsg, wParam, lParam );
 				PaintStatusBarBorders( hWnd );
+
+				return nResult;
+			}
+
+			break;
+
+		case WM_PRINTCLIENT:
+			if ( IsCheckButton( hWnd ) )
+			{
+				PaintCheckButton( hWnd, reinterpret_cast<HDC>( wParam ) );
+
+				return 0;
+			}
+
+			break;
+
+		case WM_NOTIFY:
+		{
+			const NMHDR *pHeader = reinterpret_cast<const NMHDR *>( lParam );
+			if ( pHeader && pHeader->code == NM_CUSTOMDRAW && IsClass( pHeader->hwndFrom, TOOLBARCLASSNAMEW ) )
+			{
+				const LRESULT nResult = ToolbarCustomDraw( reinterpret_cast<NMTBCUSTOMDRAW *>( lParam ) );
+
+				return nResult;
+			}
+
+			break;
+		}
+
+		// State changes of check boxes, radio buttons and up-down controls
+		case BM_SETCHECK:
+		case BM_SETSTATE:
+		case WM_ENABLE:
+		case WM_SETTEXT:
+		case WM_SETFOCUS:
+		case WM_KILLFOCUS:
+		case WM_UPDATEUISTATE:
+		case WM_LBUTTONDOWN:
+		case WM_LBUTTONDBLCLK:
+		case WM_LBUTTONUP:
+		case WM_MOUSEMOVE:
+		case WM_MOUSELEAVE:
+		case WM_KEYDOWN:
+		case WM_KEYUP:
+		case WM_CAPTURECHANGED:
+			if ( IsCheckButton( hWnd ) )
+			{
+				const LRESULT nResult = DefSubclassProc( hWnd, nMsg, wParam, lParam );
+				RepaintCheckButton( hWnd );
+
+				return nResult;
+			}
+			else if ( IsClass( hWnd, UPDOWN_CLASSW ) )
+			{
+				if ( nMsg == WM_MOUSEMOVE )
+				{
+					TRACKMOUSEEVENT track = { sizeof( track ), TME_LEAVE, hWnd, 0 };
+					TrackMouseEvent( &track );
+				}
+
+				const LRESULT nResult = DefSubclassProc( hWnd, nMsg, wParam, lParam );
+				InvalidateRect( hWnd, nullptr, FALSE );
 
 				return nResult;
 			}
