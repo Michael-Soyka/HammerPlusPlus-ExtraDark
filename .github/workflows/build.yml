@@ -16,29 +16,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build x64
+      # The x64 configuration builds the x86 proxy DLL too and packs both into the installer
+      - name: Build
         run: |
-          cmake -B build-x64 -A x64
-          cmake --build build-x64 --config Release
+          cmake -B build -A x64
+          cmake --build build --config Release
 
-      - name: Build x86
+      - name: Stage
+        shell: pwsh
         run: |
-          cmake -B build-x86 -A Win32
-          cmake --build build-x86 --config Release
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item bin/hppxdark_setup.exe, README.md, README_ru.md, LICENSE dist
 
-      # Same layout as the repository: patch.ps1 takes the DLL from bin\x64 or bin\x86
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: HammerPlusPlus-ExtraDark
-          path: |
-            bin/x64/hppxdark.dll
-            bin/x86/hppxdark.dll
-            patch.ps1
-            patch.bat
-            README.md
-            README_ru.md
-            LICENSE
+          path: dist/
           if-no-files-found: error
 
   release:
