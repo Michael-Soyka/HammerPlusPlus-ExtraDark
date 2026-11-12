@@ -6,7 +6,7 @@
 
 #pragma once
 
-// Call on the GUI thread before the first window is created, outside the loader lock.
+// Call from DllMain on the GUI thread, before hammerplusplus_dll.dll runs its initializers.
 // Does nothing when hppxdark.ini next to the DLL has [DarkTheme] Enabled=0
 void DarkTheme_Init();
 
