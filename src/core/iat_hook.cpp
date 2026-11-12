@@ -4,7 +4,7 @@
 //
 //=============================================================================//
 
-#include "iat_hook.h"
+#include "core/iat_hook.h"
 
 static void WriteThunk( ULONG_PTR *pThunk, ULONG_PTR nValue )
 {

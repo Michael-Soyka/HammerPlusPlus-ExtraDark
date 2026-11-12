@@ -5,8 +5,8 @@
 //
 //=============================================================================//
 
-#include "icons.h"
-#include "iat_hook.h"
+#include "theme/icons.h"
+#include "core/iat_hook.h"
 
 // RT_BITMAP as a number: the project builds without UNICODE
 static const ULONG_PTR s_nBitmapType = 2;

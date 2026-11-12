@@ -4,10 +4,10 @@
 //
 //=============================================================================//
 
-#include "dark_theme.h"
-#include "iat_hook.h"
-#include "icons.h"
-#include "log.h"
+#include "theme/dark_theme.h"
+#include "core/iat_hook.h"
+#include "theme/icons.h"
+#include "core/log.h"
 
 #include <windows.h>
 #include <commctrl.h>
