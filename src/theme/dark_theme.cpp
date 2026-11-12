@@ -1480,6 +1480,82 @@ static void PaintUpDown( HWND hWnd )
 	EndPaint( hWnd, &paint );
 }
 
+static const wchar_t *const s_pwszTreeChecksProp = L"hppxdark_treechecks";
+
+// Tree view check boxes: comctl32 draws its state images classic once, they are replaced with
+// the dark theme glyphs. Checked before each paint, the style can come after the creation
+static void CheckTreeCheckBoxes( HWND hTree )
+{
+	if ( !( GetWindowLongPtrW( hTree, GWL_STYLE ) & TVS_CHECKBOXES ) )
+	{
+		return;
+	}
+
+	HIMAGELIST hCurrent = TreeView_GetImageList( hTree, TVSIL_STATE );
+	if ( !hCurrent || hCurrent == GetPropW( hTree, s_pwszTreeChecksProp ) )
+	{
+		return;
+	}
+
+	int nWidth = 0;
+	int nHeight = 0;
+	ImageList_GetIconSize( hCurrent, &nWidth, &nHeight );
+	HTHEME hTheme = OpenThemeData( hTree, L"Button" );
+	if ( nWidth <= 0 || nHeight <= 0 || !hTheme )
+	{
+		if ( hTheme )
+		{
+			CloseThemeData( hTheme );
+		}
+
+		return;
+	}
+
+	// Blank, unchecked, checked
+	const int nStates[] = { 0, CBS_UNCHECKEDNORMAL, CBS_CHECKEDNORMAL };
+	HIMAGELIST hChecks = ImageList_Create( nWidth, nHeight, ILC_COLOR32, ARRAYSIZE( nStates ), 0 );
+
+	HDC hScreen = GetDC( hTree );
+	HDC hDC = CreateCompatibleDC( hScreen );
+	HBRUSH hBack = CreateSolidBrush( TreeView_GetBkColor( hTree ) == static_cast<COLORREF>( -1 ) ? s_ColorWindow : TreeView_GetBkColor( hTree ) );
+	for ( const int nState : nStates )
+	{
+		HBITMAP hBitmap = CreateCompatibleBitmap( hScreen, nWidth, nHeight );
+		HGDIOBJ hOld = SelectObject( hDC, hBitmap );
+
+		RECT cell = { 0, 0, nWidth, nHeight };
+		FillRect( hDC, &cell, hBack );
+		if ( nState )
+		{
+			SIZE glyph = { nWidth, nHeight };
+			GetThemePartSize( hTheme, hDC, BP_CHECKBOX, nState, nullptr, TS_DRAW, &glyph );
+			RECT box;
+			box.left = ( nWidth - glyph.cx ) / 2;
+			box.top = ( nHeight - glyph.cy ) / 2;
+			box.right = box.left + glyph.cx;
+			box.bottom = box.top + glyph.cy;
+			DrawThemeBackground( hTheme, hDC, BP_CHECKBOX, nState, &box, nullptr );
+		}
+
+		SelectObject( hDC, hOld );
+		ImageList_Add( hChecks, hBitmap, nullptr );
+		DeleteObject( hBitmap );
+	}
+
+	DeleteObject( hBack );
+	DeleteDC( hDC );
+	ReleaseDC( hTree, hScreen );
+	CloseThemeData( hTheme );
+
+	// The replaced list is the one comctl32 made for the style, nobody else holds it
+	SetPropW( hTree, s_pwszTreeChecksProp, hChecks );
+	HIMAGELIST hPrevious = TreeView_SetImageList( hTree, hChecks, TVSIL_STATE );
+	if ( hPrevious )
+	{
+		ImageList_Destroy( hPrevious );
+	}
+}
+
 // Toolbar buttons flat: no 3D edges, a rounded fill under the hot and pressed ones,
 // checked ones also outlined
 static LRESULT ToolbarCustomDraw( NMTBCUSTOMDRAW *pDraw )
@@ -1701,6 +1777,10 @@ static LRESULT CALLBACK DarkSubclassProc( HWND hWnd, UINT nMsg, WPARAM wParam, L
 			{
 				CheckDisabledImages( hWnd );
 			}
+			else if ( IsClass( hWnd, WC_TREEVIEWW ) )
+			{
+				CheckTreeCheckBoxes( hWnd );
+			}
 			else if ( IsSplitter( hWnd ) )
 			{
 				PaintSplitter( hWnd );
@@ -1841,6 +1921,19 @@ static LRESULT CALLBACK DarkSubclassProc( HWND hWnd, UINT nMsg, WPARAM wParam, L
 			}
 
 			break;
+
+		case WM_DESTROY:
+		{
+			// Taken back before the tree destroys its state images itself
+			HIMAGELIST hChecks = static_cast<HIMAGELIST>( RemovePropW( hWnd, s_pwszTreeChecksProp ) );
+			if ( hChecks && TreeView_GetImageList( hWnd, TVSIL_STATE ) == hChecks )
+			{
+				TreeView_SetImageList( hWnd, nullptr, TVSIL_STATE );
+				ImageList_Destroy( hChecks );
+			}
+
+			break;
+		}
 
 		case WM_NCDESTROY:
 		{
