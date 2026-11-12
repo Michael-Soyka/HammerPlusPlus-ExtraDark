@@ -1,4 +1,4 @@
-//============ Copyright 2026 Moon-6 Team, All rights reserved. ===============//
+//=========== Copyright 2026 Michael Soyka, All rights reserved. ==============//
 //
 // Purpose: Bitmaps of hammerplusplus_dll.dll replaced by the ones built into hppxdark.dll
 //			(src/assets/Bitmap<id>.bmp, same resource ids)

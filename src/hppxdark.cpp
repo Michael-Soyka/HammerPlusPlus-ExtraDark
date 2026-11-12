@@ -1,4 +1,4 @@
-//============ Copyright 2026 Moon-6 Team, All rights reserved. ===============//
+//=========== Copyright 2026 Michael Soyka, All rights reserved. ==============//
 //
 // Purpose: Hammer++ rebind of the ADVAPI32 import of hammerplusplus_dll.dll:
 //			forwards its ADVAPI32 imports (hppxdark.def) and turns on the dark theme
