@@ -1,9 +1,8 @@
 //============ Copyright 2026 Moon-6 Team, All rights reserved. ===============//
 //
 // Purpose: Hammer++ rebind of the ADVAPI32 import of hammerplusplus.exe:
-//			forwards its registry imports, appends -vulkan to the command line,
-//			preloads the OTM DXVK build (OTM_BUILD, else Valve's DXVK from bin/x64
-//			is used) and turns on the dark theme
+//			forwards its registry imports, appends -vulkan to the command line
+//			and turns on the dark theme
 //
 //=============================================================================//
 
@@ -14,11 +13,6 @@
 #include <windows.h>
 
 #include <string>
-
-#ifdef OTM_BUILD
-	//will use our's dxvk build d
-	static const wchar_t *const s_pwszDXVK = L"..\\..\\otm\\bin\\x64\\dxvk_d3d9.dll";
-#endif
 
 static FARPROC s_pGetCommandLineA = nullptr;
 static FARPROC s_pGetCommandLineW = nullptr;
@@ -39,29 +33,6 @@ static bool HasVulkanArg( const wchar_t *pwszCommandLine )
 	const bool bFound = lower.find( L" -vulkan" ) != std::wstring::npos;
 	return bFound;
 }
-
-#ifdef OTM_BUILD
-	// Loaded before the engine asks for dxvk_d3d9.dll by name, which then gets this module
-	static void PreloadDXVK()
-	{
-		wchar_t wszPath[ MAX_PATH ];
-		const DWORD nLen = GetModuleFileNameW( nullptr, wszPath, MAX_PATH );
-		if ( !nLen || nLen == MAX_PATH )
-		{
-			return;
-		}
-
-		std::wstring path = wszPath;
-		path.resize( path.find_last_of( L'\\' ) + 1 );
-		path += s_pwszDXVK;
-
-		if ( !LoadLibraryExW( path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH ) )
-		{
-			std::wstring message = L"Failed to load the OTM DXVK build, OTM shaders fall back:\n\n" + path;
-			MessageBoxW( nullptr, message.c_str(), L"hppxdark", MB_OK | MB_ICONWARNING );
-		}
-	}
-#endif
 
 // Runs on the first command line request: CRT startup, outside the loader lock
 static BOOL CALLBACK InitCommandLine( PINIT_ONCE, PVOID, PVOID * )
@@ -86,13 +57,6 @@ static BOOL CALLBACK InitCommandLine( PINIT_ONCE, PVOID, PVOID * )
 	{
 		WideCharToMultiByte( CP_ACP, 0, s_CommandLineW.c_str(), -1, s_CommandLineA.data(), nSize, nullptr, nullptr );
 	}
-
-	#ifdef OTM_BUILD
-		if ( bForceVulkan || bVulkanArg )
-		{
-			PreloadDXVK();
-		}
-	#endif
 
 	DarkTheme_Init();
 
