@@ -2,14 +2,17 @@ cmake_minimum_required( VERSION 3.21 )
 
 project( hppxdark LANGUAGES CXX )
 
-if ( NOT CMAKE_SIZEOF_VOID_P EQUAL 8 )
-	message( FATAL_ERROR "Hammer++ is 64-bit, configure for x64" )
+# Hammer++ comes in both: x64 (-A x64) and x86 (-A Win32) builds of the shim
+if ( CMAKE_SIZEOF_VOID_P EQUAL 8 )
+	set( HPPXDARK_ARCH x64 )
+else ()
+	set( HPPXDARK_ARCH x86 )
 endif ()
 
 # On: hppxdark.log next to the DLL. Off: logging is compiled out
 option( HPPXDARK_LOG "Write hppxdark.log next to the DLL" OFF )
 
-# Static CRT: the shim loads before anything else in hammerplusplus.exe
+# Static CRT: no runtime DLLs next to hammerplusplus_dll.dll
 set( CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" )
 
 add_library( hppxdark SHARED
@@ -41,11 +44,12 @@ target_compile_features( hppxdark PRIVATE cxx_std_17 )
 target_compile_options( hppxdark PRIVATE /W4 )
 target_link_libraries( hppxdark PRIVATE advapi32 comctl32 dwmapi user32 uxtheme )
 
-# patch.ps1 takes the DLL from bin
+# patch.ps1 takes the DLL from bin\x64 or bin\x86
+set( HPPXDARK_OUTPUT "${CMAKE_SOURCE_DIR}/bin/${HPPXDARK_ARCH}" )
 set_target_properties( hppxdark PROPERTIES
-	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
-	RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/bin"
-	RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/bin"
-	RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/bin"
-	RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/bin"
+	RUNTIME_OUTPUT_DIRECTORY "${HPPXDARK_OUTPUT}"
+	RUNTIME_OUTPUT_DIRECTORY_DEBUG "${HPPXDARK_OUTPUT}"
+	RUNTIME_OUTPUT_DIRECTORY_RELEASE "${HPPXDARK_OUTPUT}"
+	RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${HPPXDARK_OUTPUT}"
+	RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${HPPXDARK_OUTPUT}"
 )
