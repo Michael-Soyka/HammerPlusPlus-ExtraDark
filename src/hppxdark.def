@@ -1,5 +1,21 @@
 LIBRARY hppxdark
 EXPORTS
-	RegOpenKeyExA=Shim_RegOpenKeyExA
-	RegQueryValueExA=Shim_RegQueryValueExA
-	RegCloseKey=Shim_RegCloseKey
+	AdjustTokenPrivileges=advapi32.AdjustTokenPrivileges
+	GetFileSecurityA=advapi32.GetFileSecurityA
+	GetUserNameA=advapi32.GetUserNameA
+	LookupPrivilegeValueW=advapi32.LookupPrivilegeValueW
+	OpenProcessToken=advapi32.OpenProcessToken
+	RegCloseKey=advapi32.RegCloseKey
+	RegCreateKeyExA=advapi32.RegCreateKeyExA
+	RegDeleteKeyA=advapi32.RegDeleteKeyA
+	RegDeleteValueA=advapi32.RegDeleteValueA
+	RegEnumKeyA=advapi32.RegEnumKeyA
+	RegEnumKeyExA=advapi32.RegEnumKeyExA
+	RegEnumValueA=advapi32.RegEnumValueA
+	RegOpenKeyExA=advapi32.RegOpenKeyExA
+	RegOpenKeyExW=advapi32.RegOpenKeyExW
+	RegQueryValueA=advapi32.RegQueryValueA
+	RegQueryValueExA=advapi32.RegQueryValueExA
+	RegSetValueA=advapi32.RegSetValueA
+	RegSetValueExA=advapi32.RegSetValueExA
+	SetFileSecurityA=advapi32.SetFileSecurityA

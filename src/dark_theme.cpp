@@ -195,7 +195,7 @@ static HBRUSH DarkBrush( int nIndex )
 		return nullptr;
 	}
 
-	// Kept for the process lifetime, like the system brushes
+	// Kept for the process lifetime, like the system brushesq
 	if ( !s_hBrushes[nIndex] )
 	{
 		s_hBrushes[nIndex] = CreateSolidBrush( color );
@@ -319,7 +319,7 @@ static bool IsHookedModule( const wchar_t *pwszName )
 	return bHooked;
 }
 
-// Hammer++ loads its DLL after we start, so loaded modules are checked again on window creation
+// Loaded modules checked again on the window creation
 static void HookLoadedModules()
 {
 	static HMODULE s_hHooked[16];
@@ -350,8 +350,9 @@ static void HookLoadedModules()
 		if ( IsHookedModule( wszName ) )
 		{
 			const int nReplaced = HookImports( hModules[i], s_ColorHooks, ARRAYSIZE( s_ColorHooks ) );
+			const int nIcons = _wcsicmp( wszName, L"hammerplusplus_dll.dll" ) ? 0 : Icons_HookModule( hModules[i] );
 			s_hHooked[s_nHooked++] = hModules[i];
-			Log( "hooked %ls: %d imports", wszName, nReplaced );
+			Log( "hooked %ls: %d color imports, %d resource imports", wszName, nReplaced, nIcons );
 		}
 	}
 }
