@@ -13,30 +13,27 @@ jobs:
   build:
     runs-on: windows-latest
 
-    strategy:
-      matrix:
-        include:
-          - name: HammerPlusPlus-ExtraDark
-            otm: OFF
-          - name: HammerPlusPlus-ExtraDark-OTM
-            otm: ON
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure
-        run: cmake -B build -A x64 -DOTM_BUILD=${{ matrix.otm }}
+      - name: Build x64
+        run: |
+          cmake -B build-x64 -A x64
+          cmake --build build-x64 --config Release
 
-      - name: Build
-        run: cmake --build build --config Release
+      - name: Build x86
+        run: |
+          cmake -B build-x86 -A Win32
+          cmake --build build-x86 --config Release
 
-      # Same layout as the repository: patch.ps1 takes the DLL from bin
+      # Same layout as the repository: patch.ps1 takes the DLL from bin\x64 or bin\x86
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
+          name: HammerPlusPlus-ExtraDark
           path: |
-            bin/hppxdark.dll
+            bin/x64/hppxdark.dll
+            bin/x86/hppxdark.dll
             patch.ps1
             patch.bat
             README.md
