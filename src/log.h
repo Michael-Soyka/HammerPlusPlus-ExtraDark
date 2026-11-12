@@ -1,4 +1,4 @@
-//============ Copyright 2026 Moon-6 Team, All rights reserved. ===============//
+//=========== Copyright 2026 Michael Soyka, All rights reserved. ==============//
 //
 // Purpose: Debug log to hppxdark.log next to the DLL, built in with HPPXDARK_LOG
 //

@@ -1,4 +1,4 @@
-#============ Copyright 2026 Moon-6 Team, All rights reserved. ===============#
+#=========== Copyright 2026 Michael Soyka, All rights reserved. ==============#
 #
 # Purpose: Points the ADVAPI32 import of hammerplusplus_dll.dll at hppxdark.dll,
 #			or restores the original DLL with -Restore
