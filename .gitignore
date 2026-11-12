@@ -1,5 +1,6 @@
 # CMake build tree and the built otm_hpp.dll
 build/
+build-*/
 bin/
 
 # Visual Studio and CLion CMake folders

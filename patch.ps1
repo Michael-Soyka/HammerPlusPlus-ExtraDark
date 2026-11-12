@@ -1,22 +1,22 @@
 #============ Copyright 2026 Moon-6 Team, All rights reserved. ===============#
 #
-# Purpose: Points the ADVAPI32 import of hammerplusplus.exe at hppxdark.dll,
-#			or restores the original exe with -Restore
+# Purpose: Points the ADVAPI32 import of hammerplusplus_dll.dll at hppxdark.dll,
+#			or restores the original DLL with -Restore
 #
 #=============================================================================#
 
 param(
-	# The game bin folder or bin\x64 itself; asked for when not given
+	# The game bin folder or the one with hammerplusplus.exe itself; asked for when not given
 	[string] $HammerDir = '',
 	[switch] $Restore
 )
 
 $ErrorActionPreference = 'Stop'
 
-# bin or bin\x64: the folder that holds hammerplusplus.exe, empty if neither does
+# bin, bin\x64 or bin\win64: the folder that holds hammerplusplus.exe, empty if none does
 function Find-HammerDir( [string] $Path )
 {
-	foreach ( $candidate in @( $Path, ( Join-Path $Path 'x64' ) ) )
+	foreach ( $candidate in @( $Path, ( Join-Path $Path 'x64' ), ( Join-Path $Path 'win64' ) ) )
 	{
 		if ( Test-Path ( Join-Path $candidate 'hammerplusplus.exe' ) )
 		{
@@ -33,7 +33,7 @@ if ( $HammerDir )
 	$found = Find-HammerDir $HammerDir
 	if ( -not $found )
 	{
-		throw "hammerplusplus.exe is not found in $HammerDir or $( Join-Path $HammerDir 'x64' )"
+		throw "hammerplusplus.exe is not found in $HammerDir, its x64 or win64"
 	}
 
 	$HammerDir = $found
@@ -57,24 +57,35 @@ else
 		$HammerDir = Find-HammerDir $answer
 		if ( -not $HammerDir )
 		{
-			Write-Host "hammerplusplus.exe is not found in $answer or $( Join-Path $answer 'x64' )"
+			Write-Host "hammerplusplus.exe is not found in $answer, its x64 or win64"
 		}
 	}
 }
 
-$exe       = Join-Path $HammerDir 'hammerplusplus.exe'
-$backup    = "$exe.orig"
-$shim      = Join-Path $HammerDir 'hppxdark.dll'
-$builtShim = Join-Path $PSScriptRoot 'bin\hppxdark.dll'
+$moduleDir = Join-Path $HammerDir 'hammerplusplus\bin'
+$module    = Join-Path $moduleDir 'hammerplusplus_dll.dll'
+$backup    = "$module.orig"
+$shim      = Join-Path $moduleDir 'hppxdark.dll'
 
 $oldName = 'ADVAPI32.dll'
 $newName = 'hppxdark.dll'
 
-# Earlier names of the shim: an exe patched with them is moved to the new name
-$previousNames = @( 'otm_hpp.dll' )
+# ADVAPI32 functions forwarded by hppxdark.def
+$forwarded = @(
+	'AdjustTokenPrivileges', 'GetFileSecurityA', 'GetUserNameA', 'LookupPrivilegeValueW', 'OpenProcessToken',
+	'RegCloseKey', 'RegCreateKeyExA', 'RegDeleteKeyA', 'RegDeleteValueA', 'RegEnumKeyA', 'RegEnumKeyExA',
+	'RegEnumValueA', 'RegOpenKeyExA', 'RegOpenKeyExW', 'RegQueryValueA', 'RegQueryValueExA', 'RegSetValueA',
+	'RegSetValueExA', 'SetFileSecurityA'
+)
 
-# Registry functions forwarded by hppxdark.def
-$forwarded = @( 'RegOpenKeyExA', 'RegQueryValueExA', 'RegCloseKey' )
+# Builds before 8873 had the import patched in hammerplusplus.exe, under these shim names
+$legacyExe   = Join-Path $HammerDir 'hammerplusplus.exe'
+$legacyShims = @( 'hppxdark.dll', 'otm_hpp.dll' )
+
+if ( -not ( Test-Path $module ) )
+{
+	throw "$module is not found, this Hammer++ build is not supported"
+}
 
 function Read-CString( [byte[]] $Bytes, [int] $Offset )
 {
@@ -88,7 +99,7 @@ function Read-CString( [byte[]] $Bytes, [int] $Offset )
 	return $text
 }
 
-function Get-FileOffset( [byte[]] $Bytes, [int] $Rva )
+function Get-FileOffset( [byte[]] $Bytes, [long] $Rva )
 {
 	$pe = [BitConverter]::ToInt32( $Bytes, 0x3C )
 	$sections = [BitConverter]::ToUInt16( $Bytes, $pe + 6 )
@@ -104,7 +115,7 @@ function Get-FileOffset( [byte[]] $Bytes, [int] $Rva )
 
 		if ( $Rva -ge $virtualAddress -and $Rva -lt ( $virtualAddress + $virtualSize ) )
 		{
-			$offset = $Rva - $virtualAddress + $rawAddress
+			$offset = [int] ( $Rva - $virtualAddress + $rawAddress )
 			return $offset
 		}
 	}
@@ -112,18 +123,35 @@ function Get-FileOffset( [byte[]] $Bytes, [int] $Rva )
 	throw "RVA 0x$( '{0:X}' -f $Rva ) is outside of all sections"
 }
 
+# x64 for PE32+, x86 for PE32
+function Get-Arch( [byte[]] $Bytes )
+{
+	$pe = [BitConverter]::ToInt32( $Bytes, 0x3C )
+	$magic = [BitConverter]::ToUInt16( $Bytes, $pe + 24 )
+	if ( $magic -eq 0x20B )
+	{
+		return 'x64'
+	}
+
+	if ( $magic -eq 0x10B )
+	{
+		return 'x86'
+	}
+
+	throw "Unknown PE optional header 0x$( '{0:X}' -f $magic )"
+}
+
 # Import descriptors: name file offset and imported function names
 function Get-Imports( [byte[]] $Bytes )
 {
 	$pe = [BitConverter]::ToInt32( $Bytes, 0x3C )
-	if ( [BitConverter]::ToUInt16( $Bytes, $pe + 24 ) -ne 0x20B )
-	{
-		throw 'Not a 64-bit executable'
-	}
+	$is64 = ( Get-Arch $Bytes ) -eq 'x64'
 
-	# PE32+ data directory 1 (imports)
-	$importRva = [BitConverter]::ToUInt32( $Bytes, $pe + 24 + 112 + 8 )
+	# Data directory 1 (imports), after the 112 or 96 bytes of PE32+ or PE32 fields
+	$directories = $pe + 24 + $( if ( $is64 ) { 112 } else { 96 } )
+	$importRva = [BitConverter]::ToUInt32( $Bytes, $directories + 8 )
 	$descriptor = Get-FileOffset $Bytes $importRva
+	$thunkSize = $( if ( $is64 ) { 8 } else { 4 } )
 
 	$imports = @()
 	while ( $true )
@@ -135,28 +163,43 @@ function Get-Imports( [byte[]] $Bytes )
 			break
 		}
 
+		# No lookup table: the address table holds the names until bound
+		if ( $lookupRva -eq 0 )
+		{
+			$lookupRva = [BitConverter]::ToUInt32( $Bytes, $descriptor + 16 )
+		}
+
 		$nameOffset = Get-FileOffset $Bytes $nameRva
 		$functions = @()
 		$thunk = Get-FileOffset $Bytes $lookupRva
 		while ( $true )
 		{
-			$entry = [BitConverter]::ToUInt64( $Bytes, $thunk )
+			if ( $is64 )
+			{
+				$entry = [BitConverter]::ToUInt64( $Bytes, $thunk )
+				$byOrdinal = ( $entry -shr 63 ) -eq 1
+			}
+			else
+			{
+				$entry = [BitConverter]::ToUInt32( $Bytes, $thunk )
+				$byOrdinal = ( $entry -shr 31 ) -eq 1
+			}
+
 			if ( $entry -eq 0 )
 			{
 				break
 			}
 
-			# Top bit: import by ordinal
-			if ( ( $entry -shr 63 ) -eq 1 )
+			if ( $byOrdinal )
 			{
 				$functions += "#$( $entry -band 0xFFFF )"
 			}
 			else
 			{
-				$functions += Read-CString $Bytes ( ( Get-FileOffset $Bytes ( [int] ( $entry -band 0x7FFFFFFF ) ) ) + 2 )
+				$functions += Read-CString $Bytes ( ( Get-FileOffset $Bytes ( $entry -band 0x7FFFFFFF ) ) + 2 )
 			}
 
-			$thunk += 8
+			$thunk += $thunkSize
 		}
 
 		$imports += [pscustomobject]@{ Name = ( Read-CString $Bytes $nameOffset ); NameOffset = $nameOffset; Functions = $functions }
@@ -166,16 +209,18 @@ function Get-Imports( [byte[]] $Bytes )
 	return $imports
 }
 
-if ( $Restore )
+# hammerplusplus.exe patched before 8873: the original exe back, its shim and settings moved out
+function Restore-LegacyExe
 {
-	if ( -not ( Test-Path $backup ) )
+	$legacyBackup = "$legacyExe.orig"
+	if ( -not ( Test-Path $legacyBackup ) )
 	{
-		throw "No backup to restore: $backup"
+		return
 	}
 
-	Copy-Item $backup $exe -Force
-	Remove-Item $backup
-	foreach ( $name in @( $newName ) + $previousNames )
+	Copy-Item $legacyBackup $legacyExe -Force
+	Remove-Item $legacyBackup
+	foreach ( $name in $legacyShims )
 	{
 		$file = Join-Path $HammerDir $name
 		if ( Test-Path $file )
@@ -184,38 +229,51 @@ if ( $Restore )
 		}
 	}
 
-	Write-Host "Restored $exe"
+	$legacyIni = Join-Path $HammerDir 'hppxdark.ini'
+	$ini = Join-Path $moduleDir 'hppxdark.ini'
+	if ( ( Test-Path $legacyIni ) -and -not ( Test-Path $ini ) )
+	{
+		Move-Item $legacyIni $ini
+	}
+
+	Write-Host "Restored $legacyExe patched by an earlier version"
+}
+
+Restore-LegacyExe
+
+if ( $Restore )
+{
+	if ( -not ( Test-Path $backup ) )
+	{
+		throw "No backup to restore: $backup"
+	}
+
+	Copy-Item $backup $module -Force
+	Remove-Item $backup
+	if ( Test-Path $shim )
+	{
+		Remove-Item $shim
+	}
+
+	Write-Host "Restored $module"
 	exit 0
 }
 
+$bytes = [IO.File]::ReadAllBytes( $module )
+$arch = Get-Arch $bytes
+$builtShim = Join-Path $PSScriptRoot "bin\$arch\hppxdark.dll"
 if ( -not ( Test-Path $builtShim ) )
 {
-	throw "Build hppxdark.dll first: cmake -B build -A x64 && cmake --build build --config Release"
+	$platform = $( if ( $arch -eq 'x64' ) { 'x64' } else { 'Win32' } )
+	throw "Build the $arch hppxdark.dll first: cmake -B build-$arch -A $platform && cmake --build build-$arch --config Release"
 }
 
-$bytes = [IO.File]::ReadAllBytes( $exe )
 $imports = Get-Imports $bytes
 
 if ( $imports | Where-Object { $_.Name -ieq $newName } )
 {
 	Copy-Item $builtShim $shim -Force
-	Write-Host "Already patched, hppxdark.dll updated in $HammerDir"
-	exit 0
-}
-
-# Patched under an earlier shim name: the same import slot gets the new name
-$previous = $imports | Where-Object { $previousNames -icontains $_.Name } | Select-Object -First 1
-if ( $previous )
-{
-	$nameBytes = [Text.Encoding]::ASCII.GetBytes( $newName )
-	[Array]::Copy( $nameBytes, 0, $bytes, $previous.NameOffset, $nameBytes.Length )
-	$bytes[$previous.NameOffset + $nameBytes.Length] = 0
-
-	[IO.File]::WriteAllBytes( $exe, $bytes )
-	Copy-Item $builtShim $shim -Force
-	Remove-Item ( Join-Path $HammerDir $previous.Name )
-
-	Write-Host "Moved $exe from $( $previous.Name ) to $newName"
+	Write-Host "Already patched, hppxdark.dll updated in $moduleDir"
 	exit 0
 }
 
@@ -228,7 +286,7 @@ if ( -not $target )
 $unknown = $target.Functions | Where-Object { $forwarded -notcontains $_ }
 if ( $unknown )
 {
-	throw "Hammer++ imports from $oldName functions hppxdark.dll does not forward: $( $unknown -join ', ' ). Add them to src\hppxdark.def"
+	throw "Hammer++ imports from $oldName functions hppxdark.dll does not forward: $( $unknown -join ', ' ). Add them to src\hppxdark.def and `$forwarded"
 }
 
 # The new name with its terminator fits in the old one
@@ -239,8 +297,8 @@ for ( $i = $nameBytes.Length; $i -le $oldName.Length; $i++ )
 	$bytes[$target.NameOffset + $i] = 0
 }
 
-Copy-Item $exe $backup -Force
-[IO.File]::WriteAllBytes( $exe, $bytes )
+Copy-Item $module $backup -Force
+[IO.File]::WriteAllBytes( $module, $bytes )
 Copy-Item $builtShim $shim -Force
 
-Write-Host "Patched $exe, original saved as $( Split-Path $backup -Leaf )"
+Write-Host "Patched $module ($arch), original saved as $( Split-Path $backup -Leaf )"
