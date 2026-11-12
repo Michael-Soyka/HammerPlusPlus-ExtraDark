@@ -5,8 +5,8 @@
 //
 //=============================================================================//
 
-#include "dark_theme.h"
-#include "iat_hook.h"
+#include "theme/dark_theme.h"
+#include "core/iat_hook.h"
 
 #include <windows.h>
 
