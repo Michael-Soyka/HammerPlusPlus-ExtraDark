@@ -1480,7 +1480,8 @@ static void PaintUpDown( HWND hWnd )
 	EndPaint( hWnd, &paint );
 }
 
-// Toolbar buttons flat: no 3D edges, a rounded fill under the hot, pressed and checked ones
+// Toolbar buttons flat: no 3D edges, a rounded fill under the hot and pressed ones,
+// checked ones also outlined
 static LRESULT ToolbarCustomDraw( NMTBCUSTOMDRAW *pDraw )
 {
 	if ( pDraw->nmcd.dwDrawStage == CDDS_PREPAINT )
@@ -1495,10 +1496,12 @@ static LRESULT ToolbarCustomDraw( NMTBCUSTOMDRAW *pDraw )
 
 	const UINT nState = pDraw->nmcd.uItemState;
 	const bool bEnabled = !( nState & CDIS_DISABLED );
-	const bool bDown = !!( nState & ( CDIS_SELECTED | CDIS_CHECKED ) );
-	if ( bEnabled && ( bDown || ( nState & CDIS_HOT ) ) )
+	const bool bPressed = !!( nState & CDIS_SELECTED );
+	const bool bChecked = !!( nState & CDIS_CHECKED );
+	const bool bHot = !!( nState & CDIS_HOT );
+	if ( bEnabled && ( bPressed || bChecked || bHot ) )
 	{
-		const COLORREF fill = bDown ? s_ColorHilight : s_ColorMenuHot;
+		const COLORREF fill = ( bPressed || ( bChecked && bHot ) ) ? s_ColorHilight : s_ColorMenuHot;
 		const RECT &rect = pDraw->nmcd.rc;
 		HDC hDC = pDraw->nmcd.hdc;
 
@@ -1506,8 +1509,8 @@ static LRESULT ToolbarCustomDraw( NMTBCUSTOMDRAW *pDraw )
 		SelectObject( hDC, GetStockObject( DC_BRUSH ) );
 		SelectObject( hDC, GetStockObject( DC_PEN ) );
 		SetDCBrushColor( hDC, fill );
-		SetDCPenColor( hDC, fill );
-		RoundRect( hDC, rect.left, rect.top, rect.right, rect.bottom, 6, 6 );
+		SetDCPenColor( hDC, bChecked ? s_ColorBorder : fill );
+		RoundRect( hDC, rect.left, rect.top, rect.right, rect.bottom, 8, 8 );
 		RestoreDC( hDC, nSaved );
 	}
 
