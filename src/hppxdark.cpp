@@ -1,63 +1,23 @@
 //============ Copyright 2026 Moon-6 Team, All rights reserved. ===============//
 //
 // Purpose: Hammer++ rebind of the ADVAPI32 import of hammerplusplus.exe:
-//			forwards its registry imports, appends -vulkan to the command line
-//			and turns on the dark theme
+//			forwards its registry imports and turns on the dark theme
 //
 //=============================================================================//
 
 #include "dark_theme.h"
 #include "iat_hook.h"
-#include "log.h"
 
 #include <windows.h>
-
-#include <string>
 
 static FARPROC s_pGetCommandLineA = nullptr;
 static FARPROC s_pGetCommandLineW = nullptr;
 
-static std::string  s_CommandLineA;
-static std::wstring s_CommandLineW;
-
 static INIT_ONCE s_InitOnce = INIT_ONCE_STATIC_INIT;
 
-static bool HasVulkanArg( const wchar_t *pwszCommandLine )
-{
-	std::wstring lower = pwszCommandLine;
-	for ( wchar_t &c : lower )
-	{
-		c = towlower( c );
-	}
-
-	const bool bFound = lower.find( L" -vulkan" ) != std::wstring::npos;
-	return bFound;
-}
-
 // Runs on the first command line request: CRT startup, outside the loader lock
-static BOOL CALLBACK InitCommandLine( PINIT_ONCE, PVOID, PVOID * )
+static BOOL CALLBACK InitDarkTheme( PINIT_ONCE, PVOID, PVOID * )
 {
-	using GetCommandLineW_t = LPWSTR ( WINAPI * )();
-	const wchar_t *pwszOriginal = reinterpret_cast<GetCommandLineW_t>( s_pGetCommandLineW )();
-
-	// Off by default: the command line stays as is, Direct3D 9 unless -vulkan is passed or
-	// [ForceVulkan] Enabled=1
-	const bool bForceVulkan = GetPrivateProfileIntW( L"ForceVulkan", L"Enabled", 0, ModuleFilePath( L"hppxdark.ini" ).c_str() ) != 0;
-	const bool bVulkanArg   = HasVulkanArg( pwszOriginal );
-
-	s_CommandLineW = pwszOriginal;
-	if ( bForceVulkan && !bVulkanArg )
-	{
-		s_CommandLineW += L" -vulkan";
-	}
-
-	const int nSize = WideCharToMultiByte( CP_ACP, 0, s_CommandLineW.c_str(), -1, nullptr, 0, nullptr, nullptr );
-	s_CommandLineA.resize( nSize > 0 ? nSize - 1 : 0 );
-	if ( nSize > 1 )
-	{
-		WideCharToMultiByte( CP_ACP, 0, s_CommandLineW.c_str(), -1, s_CommandLineA.data(), nSize, nullptr, nullptr );
-	}
-
 	DarkTheme_Init();
 
 	return TRUE;
@@ -87,16 +47,18 @@ static HMODULE WINAPI HookLoadLibraryExW( LPCWSTR pwszName, HANDLE hFile, DWORD 
 
 static LPSTR WINAPI HookGetCommandLineA()
 {
-	InitOnceExecuteOnce( &s_InitOnce, InitCommandLine, nullptr, nullptr );
+	InitOnceExecuteOnce( &s_InitOnce, InitDarkTheme, nullptr, nullptr );
 
-	return s_CommandLineA.data();
+	using GetCommandLineA_t = LPSTR ( WINAPI * )();
+	return reinterpret_cast<GetCommandLineA_t>( s_pGetCommandLineA )();
 }
 
 static LPWSTR WINAPI HookGetCommandLineW()
 {
-	InitOnceExecuteOnce( &s_InitOnce, InitCommandLine, nullptr, nullptr );
+	InitOnceExecuteOnce( &s_InitOnce, InitDarkTheme, nullptr, nullptr );
 
-	return s_CommandLineW.data();
+	using GetCommandLineW_t = LPWSTR ( WINAPI * )();
+	return reinterpret_cast<GetCommandLineW_t>( s_pGetCommandLineW )();
 }
 
 // The ADVAPI32 imports of hammerplusplus.exe, exported under their names by hppxdark.def
@@ -134,7 +96,7 @@ BOOL WINAPI DllMain( HINSTANCE hInstance, DWORD nReason, LPVOID )
 		return TRUE;
 	}
 
-	// Import tables are bound before any DllMain runs; tier0 builds CommandLine() for materialsystem
+	// Import tables are bound before any DllMain runs
 	const ImportHook_t hooks[] =
 	{
 		{ s_pGetCommandLineA, reinterpret_cast<void *>( &HookGetCommandLineA ) },
