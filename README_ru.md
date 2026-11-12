@@ -8,7 +8,6 @@
 [English Version](README.md) | Русская версия
 
 Что он делает:
-- Форсирование запуска H++ через Vulkan (DXVK)
 - темная тема
 
 ## Установка
@@ -27,14 +26,13 @@ patch.bat -Restore
 patch.bat C:\path\to\bin (-Restore)
 ```
 
+Патчер сам находит `hammerplusplus.exe` в `bin`, `bin\x64` или `bin\win64` и патчит `hammerplusplus\bin\hammerplusplus_dll.dll` (оригинал сохраняется как `hammerplusplus_dll.dll.orig`). Установка, сделанная прошлой версией патчера (пропатченный `hammerplusplus.exe`), откатывается автоматически.
+
 ## Настройка
 
-Файл `hppxdark.ini` рядом с `hppxdark.dll`:
+Файл `hppxdark.ini` рядом с `hppxdark.dll`, в `hammerplusplus\bin`:
 
 ```ini
-[ForceVulkan]
-Enabled=1    ; 0 - D3D9 (по умолчанию) / 1 - auto -vulkan
-
 [DarkTheme]
 Enabled=1    ; 0 - light theme / 1 - custom dark theme
 ```
@@ -74,21 +72,25 @@ Text=220,220,220
 
 ## Требования
 
-- Hammer++ (8872) для 64-битных игр на Source SDK 2013, установленный в `bin/x64` игры
+- Hammer++ 8873, 32- или 64-битный: патч проверен на сборках 2013mp, 2013sp, l4d2, portal2 (x86), gmod и tf2 (x64)
 - Visual Studio \>=2022
 - Компонент "Разработка классических приложений на C++"
 - CMake ( может входить в компонент )
 
 ## Сборка
 
+Патчер берёт DLL той же разрядности, что и Hammer++: `bin\x64\hppxdark.dll` или `bin\x86\hppxdark.dll`.
+
 ```
-cmake -B build -A x64
-cmake --build build --config Release
+cmake -B build-x64 -A x64
+cmake --build build-x64 --config Release
+
+cmake -B build-x86 -A Win32
+cmake --build build-x86 --config Release
 ```
 
 Опции CMake:
 - `HPPXDARK_LOG` - логирование процесса, по умолчанию выключен.
-- `OTM_BUILD`    - для внутренних билдов.
 
 ## Авторы
 

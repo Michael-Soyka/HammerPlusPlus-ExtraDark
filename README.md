@@ -8,7 +8,6 @@ Our in-house patcher for [Hammer++](https://ficool2.github.io/HammerPlusPlus-Web
 English Version | [Русская версия](README_ru.md)
 
 What it does:
-- Forces Hammer++ to start through Vulkan (DXVK)
 - Dark theme
 
 ## Installation
@@ -27,14 +26,13 @@ Alternatively, from a terminal:
 patch.bat C:\path\to\bin (-Restore)
 ```
 
+The patcher finds `hammerplusplus.exe` in `bin`, `bin\x64` or `bin\win64` and patches `hammerplusplus\bin\hammerplusplus_dll.dll` (the original is saved as `hammerplusplus_dll.dll.orig`). An install made by an earlier version of the patcher (a patched `hammerplusplus.exe`) is rolled back automatically.
+
 ## Configuration
 
-The `hppxdark.ini` file next to `hppxdark.dll`:
+The `hppxdark.ini` file next to `hppxdark.dll`, in `hammerplusplus\bin`:
 
 ```ini
-[ForceVulkan]
-Enabled=1    ; 0 - D3D9 (default) / 1 - auto -vulkan
-
 [DarkTheme]
 Enabled=1    ; 0 - light theme / 1 - custom dark theme
 ```
@@ -74,7 +72,7 @@ Text=220,220,220
 
 ## Requirements
 
-- Hammer++ (8872) for 64-bit Source SDK 2013 games, installed in the game's `bin/x64`
+- Hammer++ 8873, 32- or 64-bit: patching checked on the 2013mp, 2013sp, l4d2, portal2 (x86), gmod and tf2 (x64) builds
 - Visual Studio \>=2022
 - The "Desktop development with C++" workload
 - CMake (may come with the workload)
@@ -82,14 +80,18 @@ Text=220,220,220
 
 ## Building
 
+The patcher takes the DLL of the same bitness as Hammer++: `bin\x64\hppxdark.dll` or `bin\x86\hppxdark.dll`.
+
 ```
-cmake -B build -A x64
-cmake --build build --config Release
+cmake -B build-x64 -A x64
+cmake --build build-x64 --config Release
+
+cmake -B build-x86 -A Win32
+cmake --build build-x86 --config Release
 ```
 
 CMake options:
 - `HPPXDARK_LOG` - process logging, off by default.
-- `OTM_BUILD`    - for in-house builds.
 
 ## Authors
 
