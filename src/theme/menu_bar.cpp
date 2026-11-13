@@ -7,6 +7,7 @@
 #include "theme/menu_bar.h"
 #include "theme/system_colors.h"
 #include "theme/window_util.h"
+#include "core/gdi.h"
 #include "core/log.h"
 
 struct UahMenu_t
@@ -221,13 +222,11 @@ void MenuBar_PaintNonClient( HWND hWnd )
 		return;
 	}
 
-	HDC hDC = GetWindowDC( hWnd );
-	PaintBottomLine( hWnd, hDC );
+	const WindowDC_t dc( hWnd, GetWindowDC( hWnd ) );
+	PaintBottomLine( hWnd, dc.m_hDC );
 
 	if ( hMenu )
 	{
-		PaintSystemIcon( hWnd, hMenu, hDC );
+		PaintSystemIcon( hWnd, hMenu, dc.m_hDC );
 	}
-
-	ReleaseDC( hWnd, hDC );
 }

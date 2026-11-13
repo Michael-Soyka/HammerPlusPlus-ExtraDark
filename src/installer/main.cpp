@@ -5,6 +5,7 @@
 //
 //=============================================================================//
 
+#include "core/gdi.h"
 #include "installer/hammer_dir.h"
 #include "installer/hammer_paths.h"
 #include "installer/patcher.h"
@@ -443,17 +444,12 @@ static void OnCommand( int nId, int nCode )
 
 static void FillRound( HDC hDC, const RECT &rect, COLORREF nFill, COLORREF nEdge )
 {
-	HBRUSH hBrush     = CreateSolidBrush( nFill );
-	HPEN hPen         = CreatePen( PS_SOLID, 1, nEdge );
-	HGDIOBJ hOldBrush = SelectObject( hDC, hBrush );
-	HGDIOBJ hOldPen   = SelectObject( hDC, hPen );
+	const GdiObject_t<HBRUSH> brush( CreateSolidBrush( nFill ) );
+	const GdiObject_t<HPEN> pen( CreatePen( PS_SOLID, 1, nEdge ) );
+	const SelectedObject_t selectedBrush( hDC, brush.m_hObject );
+	const SelectedObject_t selectedPen( hDC, pen.m_hObject );
 
 	RoundRect( hDC, rect.left, rect.top, rect.right, rect.bottom, Scale( 6 ), Scale( 6 ) );
-
-	SelectObject( hDC, hOldBrush );
-	SelectObject( hDC, hOldPen );
-	DeleteObject( hBrush );
-	DeleteObject( hPen );
 }
 
 static COLORREF ButtonFillColor( const DRAWITEMSTRUCT &item )
@@ -500,7 +496,7 @@ static void DrawButtonText( const DRAWITEMSTRUCT &item, bool bDisabled )
 
 	SetBkMode( item.hDC, TRANSPARENT );
 	SetTextColor( item.hDC, nColor );
-	SelectObject( item.hDC, s_App.m_hFont );
+	const SelectedObject_t font( item.hDC, s_App.m_hFont );
 
 	DrawTextW( item.hDC, wszText, -1, &text, DT_CENTER | DT_VCENTER | DT_SINGLELINE );
 }
@@ -511,15 +507,11 @@ static void DrawButtonFocus( const DRAWITEMSTRUCT &item )
 	RECT focus = item.rcItem;
 	InflateRect( &focus, -Scale( 2 ), -Scale( 2 ) );
 
-	HPEN hPen         = CreatePen( PS_SOLID, 1, s_nText );
-	HGDIOBJ hOldPen   = SelectObject( item.hDC, hPen );
-	HGDIOBJ hOldBrush = SelectObject( item.hDC, GetStockObject( NULL_BRUSH ) );
+	const GdiObject_t<HPEN> pen( CreatePen( PS_SOLID, 1, s_nText ) );
+	const SelectedObject_t selectedPen( item.hDC, pen.m_hObject );
+	const SelectedObject_t selectedBrush( item.hDC, GetStockObject( NULL_BRUSH ) );
 
 	RoundRect( item.hDC, focus.left, focus.top, focus.right, focus.bottom, Scale( 5 ), Scale( 5 ) );
-	SelectObject( item.hDC, hOldBrush );
-	SelectObject( item.hDC, hOldPen );
-
-	DeleteObject( hPen );
 }
 
 static void OnDrawButton( const DRAWITEMSTRUCT &item )
@@ -545,13 +537,8 @@ static void OnDrawButton( const DRAWITEMSTRUCT &item )
 
 static void OnPaint()
 {
-	PAINTSTRUCT paint;
-	
-	HDC hDC = BeginPaint( s_App.m_hWnd, &paint );
-
-	FillRound( hDC, ScaleBox( s_PathFrame ), s_nField, s_nBorder );
-
-	EndPaint( s_App.m_hWnd, &paint );
+	const PaintDC_t paint( s_App.m_hWnd );
+	FillRound( paint.m_hDC, ScaleBox( s_PathFrame ), s_nField, s_nBorder );
 }
 
 static COLORREF StaticColor( int nId )

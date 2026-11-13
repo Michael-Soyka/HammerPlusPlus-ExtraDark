@@ -7,6 +7,7 @@
 
 #include "theme/control_images.h"
 #include "theme/system_colors.h"
+#include "core/gdi.h"
 #include "core/log.h"
 
 #include <commctrl.h>
@@ -56,10 +57,10 @@ static void DimPixels( DWORD *pPixels, int nPixels )
 
 static void AddDimmedImage( HIMAGELIST hDisabled, HIMAGELIST hNormal, int nImage, HDC hDC, const BITMAPINFO &info )
 {
-	DWORD *pPixels  = nullptr;
-	HBITMAP hBitmap = CreateDIBSection( hDC, &info, DIB_RGB_COLORS, reinterpret_cast<void **>( &pPixels ), nullptr, 0 );
+	DWORD *pPixels = nullptr;
+	const GdiObject_t<HBITMAP> bitmap( CreateDIBSection( hDC, &info, DIB_RGB_COLORS, reinterpret_cast<void **>( &pPixels ), nullptr, 0 ) );
 
-	if ( !hBitmap )
+	if ( !bitmap.m_hObject )
 	{
 		return;
 	}
@@ -71,15 +72,14 @@ static void AddDimmedImage( HIMAGELIST hDisabled, HIMAGELIST hNormal, int nImage
 		pPixels[ n ] = s_nKey;
 	}
 
-	HGDIOBJ hOld = SelectObject( hDC, hBitmap );
-	ImageList_Draw( hNormal, nImage, hDC, 0, 0, ILD_TRANSPARENT );
-	GdiFlush();
-	SelectObject( hDC, hOld );
+	{
+		const SelectedObject_t selected( hDC, bitmap.m_hObject );
+		ImageList_Draw( hNormal, nImage, hDC, 0, 0, ILD_TRANSPARENT );
+		GdiFlush();
+	}
 
 	DimPixels( pPixels, nPixels );
-	ImageList_Add( hDisabled, hBitmap, nullptr );
-
-	DeleteObject( hBitmap );
+	ImageList_Add( hDisabled, bitmap.m_hObject, nullptr );
 }
 
 static HIMAGELIST CreateDisabledImages( HIMAGELIST hNormal, int nWidth, int nHeight, int nCount )
@@ -99,14 +99,12 @@ static HIMAGELIST CreateDisabledImages( HIMAGELIST hNormal, int nWidth, int nHei
 	info.bmiHeader.biBitCount    = 32;
 	info.bmiHeader.biCompression = BI_RGB;
 
-	HDC hDC = CreateCompatibleDC( nullptr );
+	const MemoryDC_t memory( nullptr );
 
 	for ( int i = 0; i < nCount; i++ )
 	{
-		AddDimmedImage( hDisabled, hNormal, i, hDC, info );
+		AddDimmedImage( hDisabled, hNormal, i, memory.m_hDC, info );
 	}
-
-	DeleteDC( hDC );
 
 	return hDisabled;
 }
@@ -191,7 +189,7 @@ static COLORREF TreeBackground( HWND hTree )
 static HBITMAP DrawTreeCheckBox( HTHEME hTheme, HDC hScreen, HDC hDC, int nState, const SIZE &cell, HBRUSH hBackground )
 {
 	HBITMAP hBitmap = CreateCompatibleBitmap( hScreen, cell.cx, cell.cy );
-	HGDIOBJ hOld    = SelectObject( hDC, hBitmap );
+	const SelectedObject_t selected( hDC, hBitmap );
 
 	const RECT rect = { 0, 0, cell.cx, cell.cy };
 	FillRect( hDC, &rect, hBackground );
@@ -209,8 +207,6 @@ static HBITMAP DrawTreeCheckBox( HTHEME hTheme, HDC hScreen, HDC hDC, int nState
 		DrawThemeBackground( hTheme, hDC, BP_CHECKBOX, nState, &box, nullptr );
 	}
 
-	SelectObject( hDC, hOld );
-
 	return hBitmap;
 }
 
@@ -220,21 +216,15 @@ static HIMAGELIST CreateTreeCheckBoxes( HWND hTree, HTHEME hTheme, const SIZE &c
 	const int nStates[] = { 0, CBS_UNCHECKEDNORMAL, CBS_CHECKEDNORMAL };
 	HIMAGELIST hChecks  = ImageList_Create( cell.cx, cell.cy, ILC_COLOR32, ARRAYSIZE( nStates ), 0 );
 
-	HDC hScreen        = GetDC( hTree );
-	HDC hDC            = CreateCompatibleDC( hScreen );
-	HBRUSH hBackground = CreateSolidBrush( TreeBackground( hTree ) );
+	const WindowDC_t screen( hTree, GetDC( hTree ) );
+	const MemoryDC_t memory( screen.m_hDC );
+	const GdiObject_t<HBRUSH> background( CreateSolidBrush( TreeBackground( hTree ) ) );
 
 	for ( const int nState : nStates )
 	{
-		HBITMAP hBitmap = DrawTreeCheckBox( hTheme, hScreen, hDC, nState, cell, hBackground );
-		ImageList_Add( hChecks, hBitmap, nullptr );
-
-		DeleteObject( hBitmap );
+		const GdiObject_t<HBITMAP> bitmap( DrawTreeCheckBox( hTheme, screen.m_hDC, memory.m_hDC, nState, cell, background.m_hObject ) );
+		ImageList_Add( hChecks, bitmap.m_hObject, nullptr );
 	}
-
-	DeleteObject( hBackground );
-	DeleteDC( hDC );
-	ReleaseDC( hTree, hScreen );
 
 	return hChecks;
 }
@@ -264,15 +254,14 @@ void CheckTreeCheckBoxes( HWND hTree )
 
 	const SIZE cell = { nWidth, nHeight };
 
-	HTHEME hTheme = OpenThemeData( hTree, L"Button" );
+	const ThemeData_t theme( hTree, L"Button" );
 
-	if ( !hTheme )
+	if ( !theme.m_hTheme )
 	{
 		return;
 	}
 
-	HIMAGELIST hChecks = CreateTreeCheckBoxes( hTree, hTheme, cell );
-	CloseThemeData( hTheme );
+	HIMAGELIST hChecks = CreateTreeCheckBoxes( hTree, theme.m_hTheme, cell );
 
 	// The replaced list is the one comctl32 made for the style, nobody else holds it
 	SetPropW( hTree, s_pwszTreeChecksProp, hChecks );
