@@ -138,6 +138,7 @@ if ( HPPXDARK_ARCH STREQUAL "x64" )
 	)
 
 	add_executable( hppxdark_setup WIN32
+		src/installer/authors.cpp
 		src/installer/hammer_dir.cpp
 		src/installer/hammer_paths.cpp
 		src/installer/patcher.cpp
@@ -147,7 +148,7 @@ if ( HPPXDARK_ARCH STREQUAL "x64" )
 	)
 
 	file( GENERATE OUTPUT "${CMAKE_BINARY_DIR}/hppxdark_setup.rc" CONTENT
-		"#include \"installer/resources.h\"\nIDI_APP ICON \"${CMAKE_SOURCE_DIR}/src/assets/hpp-extra-dark-app-icon.ico\"\nIDR_PROXY_X86 RCDATA \"${CMAKE_SOURCE_DIR}/bin/x86/hppxdark.dll\"\nIDR_PROXY_X64 RCDATA \"$<TARGET_FILE:hppxdark>\"\n"
+		"#include \"installer/resources.h\"\nIDI_APP ICON \"${CMAKE_SOURCE_DIR}/src/assets/hpp-extra-dark-app-icon.ico\"\nIDR_PROXY_X86 RCDATA \"${CMAKE_SOURCE_DIR}/bin/x86/hppxdark.dll\"\nIDR_PROXY_X64 RCDATA \"$<TARGET_FILE:hppxdark>\"\nIDR_AVATAR_FICOOL2 RCDATA \"${CMAKE_SOURCE_DIR}/src/assets/avatar_ficool2.png\"\nIDR_AVATAR_MICHAEL_SOYKA RCDATA \"${CMAKE_SOURCE_DIR}/src/assets/avatar_michael_soyka.png\"\n"
 	)
 	target_sources( hppxdark_setup PRIVATE "${CMAKE_BINARY_DIR}/hppxdark_setup.rc" )
 	hppxdark_version_resource( hppxdark_setup hppxdark_setup.exe VFT_APP "Hammer++ Extra Dark installer" )
@@ -159,7 +160,7 @@ if ( HPPXDARK_ARCH STREQUAL "x64" )
 	)
 	target_compile_features( hppxdark_setup PRIVATE cxx_std_17 )
 	target_compile_options( hppxdark_setup PRIVATE /W4 /utf-8 )
-	target_link_libraries( hppxdark_setup PRIVATE comctl32 dwmapi ole32 shell32 uxtheme version )
+	target_link_libraries( hppxdark_setup PRIVATE comctl32 dwmapi gdiplus msimg32 ole32 shell32 shlwapi urlmon uxtheme version )
 
 	set_target_properties( hppxdark_setup PROPERTIES
 		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
