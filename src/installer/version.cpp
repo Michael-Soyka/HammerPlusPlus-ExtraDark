@@ -60,24 +60,14 @@ bool ReadFileVersion( const std::filesystem::path &path, Version_t &version )
 
 int CompareVersions( const Version_t &a, const Version_t &b )
 {
-	if ( a.m_nMajor != b.m_nMajor )
+	const unsigned nA[] = { a.m_nMajor, a.m_nMinor, a.m_nBuild, a.m_nRevision };
+	const unsigned nB[] = { b.m_nMajor, b.m_nMinor, b.m_nBuild, b.m_nRevision };
+	for ( size_t i = 0; i < ARRAYSIZE( nA ); i++ )
 	{
-		return a.m_nMajor < b.m_nMajor ? -1 : 1;
-	}
-
-	if ( a.m_nMinor != b.m_nMinor )
-	{
-		return a.m_nMinor < b.m_nMinor ? -1 : 1;
-	}
-
-	if ( a.m_nBuild != b.m_nBuild )
-	{
-		return a.m_nBuild < b.m_nBuild ? -1 : 1;
-	}
-
-	if ( a.m_nRevision != b.m_nRevision )
-	{
-		return a.m_nRevision < b.m_nRevision ? -1 : 1;
+		if ( nA[i] != nB[i] )
+		{
+			return nA[i] < nB[i] ? -1 : 1;
+		}
 	}
 
 	return 0;
@@ -90,6 +80,5 @@ std::wstring FormatVersion( const Version_t &version )
 		return version.m_Text;
 	}
 
-	const std::wstring text = std::to_wstring( version.m_nMajor ) + L"." + std::to_wstring( version.m_nMinor ) + L"." + std::to_wstring( version.m_nBuild ) + L"." + std::to_wstring( version.m_nRevision );
-	return text;
+	return std::to_wstring( version.m_nMajor ) + L"." + std::to_wstring( version.m_nMinor ) + L"." + std::to_wstring( version.m_nBuild ) + L"." + std::to_wstring( version.m_nRevision );
 }
