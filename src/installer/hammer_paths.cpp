@@ -29,16 +29,13 @@ HammerPaths_t MakeHammerPaths( const fs::path &hammerDir )
 
 fs::path BackupOf( const fs::path &file )
 {
-	const fs::path backup = fs::path( file ).concat( L".orig" );
-	return backup;
+	return fs::path( file ).concat( L".orig" );
 }
 
 bool IsFile( const fs::path &path )
 {
 	std::error_code error;
-	const bool bFile = fs::is_regular_file( path, error );
-
-	return bFile;
+	return fs::is_regular_file( path, error );
 }
 
 void RemoveFile( const fs::path &path )
@@ -51,9 +48,7 @@ bool CopyOver( const fs::path &from, const fs::path &to )
 {
 	std::error_code error;
 	fs::copy_file( from, to, fs::copy_options::overwrite_existing, error );
-
-	const bool bCopied = !error;
-	return bCopied;
+	return !error;
 }
 
 bool ReadFileBytes( const fs::path &path, Bytes_t &bytes )
@@ -72,7 +67,5 @@ bool WriteFileBytes( const fs::path &path, const void *pData, size_t nSize )
 {
 	std::ofstream file( path, std::ios::binary | std::ios::trunc );
 	file.write( static_cast<const char *>( pData ), static_cast<std::streamsize>( nSize ) );
-
-	const bool bWritten = file.good();
-	return bWritten;
+	return file.good();
 }

@@ -11,29 +11,17 @@
 
 namespace fs = std::filesystem;
 
-static bool IsPastedPathEdge( wchar_t c )
-{
-	const bool bEdge = c == L'"' || c == L' ';
-	return bEdge;
-}
-
 // Pasted paths often come quoted
 static std::wstring TrimPastedPath( const std::wstring &path )
 {
-	size_t nStart = 0;
-	size_t nEnd = path.size();
-	while ( nEnd > nStart && IsPastedPathEdge( path[nEnd - 1] ) )
+	const wchar_t *const pwszEdges = L"\" ";
+	const size_t nStart = path.find_first_not_of( pwszEdges );
+	if ( nStart == std::wstring::npos )
 	{
-		nEnd--;
+		return {};
 	}
 
-	while ( nStart < nEnd && IsPastedPathEdge( path[nStart] ) )
-	{
-		nStart++;
-	}
-
-	const std::wstring trimmed = path.substr( nStart, nEnd - nStart );
-	return trimmed;
+	return path.substr( nStart, path.find_last_not_of( pwszEdges ) - nStart + 1 );
 }
 
 // The folder itself, x64 or win64 under it: where hammerplusplus.exe is, empty when nowhere
@@ -48,8 +36,7 @@ static fs::path FindExeDir( const fs::path &base )
 
 		std::error_code error;
 		const fs::path canonical = fs::canonical( candidate, error );
-		const fs::path dir = error ? candidate : canonical;
-		return dir;
+		return error ? candidate : canonical;
 	}
 
 	return {};

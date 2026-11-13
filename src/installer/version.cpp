@@ -66,8 +66,7 @@ int CompareVersions( const Version_t &a, const Version_t &b )
 	{
 		if ( nA[i] != nB[i] )
 		{
-			const int nOrder = nA[i] < nB[i] ? -1 : 1;
-			return nOrder;
+			return nA[i] < nB[i] ? -1 : 1;
 		}
 	}
 
@@ -81,6 +80,5 @@ std::wstring FormatVersion( const Version_t &version )
 		return version.m_Text;
 	}
 
-	const std::wstring text = std::to_wstring( version.m_nMajor ) + L"." + std::to_wstring( version.m_nMinor ) + L"." + std::to_wstring( version.m_nBuild ) + L"." + std::to_wstring( version.m_nRevision );
-	return text;
+	return std::to_wstring( version.m_nMajor ) + L"." + std::to_wstring( version.m_nMinor ) + L"." + std::to_wstring( version.m_nBuild ) + L"." + std::to_wstring( version.m_nRevision );
 }

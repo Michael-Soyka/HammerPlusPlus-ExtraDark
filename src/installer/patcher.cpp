@@ -31,8 +31,7 @@ static const wchar_t *const s_pwszLegacyNames[] = { L"hppxdark.dll", L"otm_hpp.d
 
 static std::wstring Widen( const std::string &ascii )
 {
-	const std::wstring wide( ascii.begin(), ascii.end() );
-	return wide;
+	return std::wstring( ascii.begin(), ascii.end() );
 }
 
 static bool IsForwarded( const std::string &function )
@@ -81,8 +80,7 @@ static bool WriteProxy( bool b64, const fs::path &path )
 		return false;
 	}
 
-	const bool bWritten = WriteFileBytes( path, pData, SizeofResource( nullptr, hResource ) );
-	return bWritten;
+	return WriteFileBytes( path, pData, SizeofResource( nullptr, hResource ) );
 }
 
 // hammerplusplus.exe patched before 8873: the original exe back, its proxy DLL and settings moved out
