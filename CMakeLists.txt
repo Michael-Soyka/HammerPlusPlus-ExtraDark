@@ -67,8 +67,14 @@ set( CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" )
 add_library( hppxdark SHARED
 	src/core/iat_hook.cpp
 	src/core/log.cpp
+	src/theme/control_images.cpp
+	src/theme/control_paint.cpp
 	src/theme/dark_theme.cpp
 	src/theme/icons.cpp
+	src/theme/menu_bar.cpp
+	src/theme/message_boxes.cpp
+	src/theme/system_colors.cpp
+	src/theme/window_util.cpp
 	src/hppxdark.cpp
 	src/hppxdark.def
 )
