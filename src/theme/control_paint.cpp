@@ -205,31 +205,68 @@ static RECT PaintTabBody( HWND hWnd, HDC hDC )
 	return body;
 }
 
+// The ANSI or Unicode item struct, message and DrawText of a tab control
+template <typename Char_t>
+struct TabText_t;
+
+template <>
+struct TabText_t<char>
+{
+	using Item_t = TCITEMA;
+
+	static void GetItem( HWND hWnd, int nTab, Item_t &item )
+	{
+		SendMessageA( hWnd, TCM_GETITEMA, nTab, reinterpret_cast<LPARAM>( &item ) );
+	}
+
+	static void Draw( HDC hDC, const char *pszText, RECT &rect, UINT nFormat )
+	{
+		DrawTextA( hDC, pszText, -1, &rect, nFormat );
+	}
+};
+
+template <>
+struct TabText_t<wchar_t>
+{
+	using Item_t = TCITEMW;
+
+	static void GetItem( HWND hWnd, int nTab, Item_t &item )
+	{
+		SendMessageW( hWnd, TCM_GETITEMW, nTab, reinterpret_cast<LPARAM>( &item ) );
+	}
+
+	static void Draw( HDC hDC, const wchar_t *pwszText, RECT &rect, UINT nFormat )
+	{
+		DrawTextW( hDC, pwszText, -1, &rect, nFormat );
+	}
+};
+
+template <typename Char_t>
+static void DrawTabTextAs( HWND hWnd, HDC hDC, int nTab, RECT &rect )
+{
+	using Text_t = TabText_t<Char_t>;
+
+	Char_t szText[ 128 ]        = {};
+	typename Text_t::Item_t item = {};
+	item.mask                    = TCIF_TEXT;
+	item.pszText                 = szText;
+	item.cchTextMax              = ARRAYSIZE( szText );
+
+	Text_t::GetItem( hWnd, nTab, item );
+	Text_t::Draw( hDC, szText, rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_HIDEPREFIX );
+}
+
 // Hammer++ creates ANSI tab controls: their text is read and drawn as ANSI
 static void DrawTabText( HWND hWnd, HDC hDC, int nTab, RECT &rect )
 {
-	const UINT nFormat = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_HIDEPREFIX;
-
 	if ( IsWindowUnicode( hWnd ) )
 	{
-		wchar_t wszText[ 128 ] = {};
-		TCITEMW item         = {};
-		item.mask            = TCIF_TEXT;
-		item.pszText         = wszText;
-		item.cchTextMax      = ARRAYSIZE( wszText );
-		SendMessageW( hWnd, TCM_GETITEMW, nTab, reinterpret_cast<LPARAM>( &item ) );
-		DrawTextW( hDC, wszText, -1, &rect, nFormat );
+		DrawTabTextAs<wchar_t>( hWnd, hDC, nTab, rect );
+
+		return;
 	}
-	else
-	{
-		char szText[ 128 ] = {};
-		TCITEMA item     = {};
-		item.mask        = TCIF_TEXT;
-		item.pszText     = szText;
-		item.cchTextMax  = ARRAYSIZE( szText );
-		SendMessageA( hWnd, TCM_GETITEMA, nTab, reinterpret_cast<LPARAM>( &item ) );
-		DrawTextA( hDC, szText, -1, &rect, nFormat );
-	}
+
+	DrawTabTextAs<char>( hWnd, hDC, nTab, rect );
 }
 
 static void PaintTab( HWND hWnd, HDC hDC, int nTab, bool bSelected, const RECT &body )

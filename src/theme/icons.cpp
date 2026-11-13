@@ -23,16 +23,15 @@ static HMODULE s_hHammer = nullptr;
 static HRSRC s_hOwnResources[ 64 ];
 static int s_nOwnResources = 0;
 
-using FindResourceA_t   = HRSRC ( WINAPI * )( HMODULE, LPCSTR, LPCSTR );
-using FindResourceW_t   = HRSRC ( WINAPI * )( HMODULE, LPCWSTR, LPCWSTR );
+// Char_t: char for the A functions, wchar_t for the W ones
+template <typename Char_t> using FindResource_t = HRSRC ( WINAPI * )( HMODULE, const Char_t *, const Char_t * );
+template <typename Char_t> using LoadImage_t    = HANDLE ( WINAPI * )( HINSTANCE, const Char_t *, UINT, int, int, UINT );
+template <typename Char_t> using LoadIcon_t     = HICON ( WINAPI * )( HINSTANCE, const Char_t * );
+
 using FindResourceExW_t = HRSRC ( WINAPI * )( HMODULE, LPCWSTR, LPCWSTR, WORD );
 using LoadResource_t    = HGLOBAL ( WINAPI * )( HMODULE, HRSRC );
 using SizeofResource_t  = DWORD ( WINAPI * )( HMODULE, HRSRC );
 using LoadBitmapW_t     = HBITMAP ( WINAPI * )( HINSTANCE, LPCWSTR );
-using LoadImageA_t      = HANDLE ( WINAPI * )( HINSTANCE, LPCSTR, UINT, int, int, UINT );
-using LoadImageW_t      = HANDLE ( WINAPI * )( HINSTANCE, LPCWSTR, UINT, int, int, UINT );
-using LoadIconA_t       = HICON ( WINAPI * )( HINSTANCE, LPCSTR );
-using LoadIconW_t       = HICON ( WINAPI * )( HINSTANCE, LPCWSTR );
 
 static FARPROC s_pFindResourceA   = nullptr;
 static FARPROC s_pFindResourceW   = nullptr;
@@ -69,7 +68,7 @@ static bool IsHammer( HMODULE hModule )
 
 static HRSRC FindSelfResource( ULONG_PTR nName, ULONG_PTR nType )
 {
-	return reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( s_hSelf, MAKEINTRESOURCEW( nName ), MAKEINTRESOURCEW( nType ) );
+	return reinterpret_cast<FindResource_t<wchar_t>>( s_pFindResourceW )( s_hSelf, MAKEINTRESOURCEW( nName ), MAKEINTRESOURCEW( nType ) );
 }
 
 static bool IsOwnResource( HRSRC hResource )
@@ -259,28 +258,17 @@ static HANDLE LoadCheckStrip( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, 
 // Hooks of the Hammer++ DLL imports
 //-----------------------------------------------------------------------------
 
-static HRSRC WINAPI HookFindResourceA( HMODULE hModule, LPCSTR pszName, LPCSTR pszType )
+template <typename Char_t, FARPROC *ppOriginal>
+static HRSRC WINAPI HookFindResource( HMODULE hModule, const Char_t *pName, const Char_t *pType )
 {
-	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pszName ), reinterpret_cast<ULONG_PTR>( pszType ) );
+	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pName ), reinterpret_cast<ULONG_PTR>( pType ) );
 
 	if ( hResource )
 	{
 		return hResource;
 	}
 
-	return reinterpret_cast<FindResourceA_t>( s_pFindResourceA )( hModule, pszName, pszType );
-}
-
-static HRSRC WINAPI HookFindResourceW( HMODULE hModule, LPCWSTR pwszName, LPCWSTR pwszType )
-{
-	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pwszName ), reinterpret_cast<ULONG_PTR>( pwszType ) );
-
-	if ( hResource )
-	{
-		return hResource;
-	}
-
-	return reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( hModule, pwszName, pwszType );
+	return reinterpret_cast<FindResource_t<Char_t>>( *ppOriginal )( hModule, pName, pType );
 }
 
 static HRSRC WINAPI HookFindResourceExW( HMODULE hModule, LPCWSTR pwszType, LPCWSTR pwszName, WORD nLanguage )
@@ -312,9 +300,10 @@ static HBITMAP WINAPI HookLoadBitmapW( HINSTANCE hInstance, LPCWSTR pwszName )
 	return reinterpret_cast<LoadBitmapW_t>( s_pLoadBitmapW )( ResourceModule( bOwn, hInstance ), pwszName );
 }
 
-static HANDLE WINAPI HookLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
+template <typename Char_t, FARPROC *ppOriginal>
+static HANDLE WINAPI HookLoadImage( HINSTANCE hInstance, const Char_t *pName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
-	const ULONG_PTR nName = reinterpret_cast<ULONG_PTR>( pszName );
+	const ULONG_PTR nName = reinterpret_cast<ULONG_PTR>( pName );
 
 	HANDLE hStrip = LoadCheckStrip( hInstance, nName, nType, nFlags );
 
@@ -323,63 +312,34 @@ static HANDLE WINAPI HookLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT n
 		return hStrip;
 	}
 
-	return reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( ImageModule( hInstance, nName, nType, nFlags ), pszName, nType, nWidth, nHeight, nFlags );
+	HINSTANCE hModule = ImageModule( hInstance, nName, nType, nFlags );
+
+	return reinterpret_cast<LoadImage_t<Char_t>>( *ppOriginal )( hModule, pName, nType, nWidth, nHeight, nFlags );
 }
 
-static HANDLE WINAPI HookLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
+template <typename Char_t, FARPROC *ppOriginal>
+static HICON WINAPI HookLoadIcon( HINSTANCE hInstance, const Char_t *pName )
 {
-	const ULONG_PTR nName = reinterpret_cast<ULONG_PTR>( pwszName );
+	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pName ) );
 
-	HANDLE hStrip = LoadCheckStrip( hInstance, nName, nType, nFlags );
-
-	if ( hStrip )
-	{
-		return hStrip;
-	}
-
-	return reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( ImageModule( hInstance, nName, nType, nFlags ), pwszName, nType, nWidth, nHeight, nFlags );
-}
-
-static HICON WINAPI HookLoadIconA( HINSTANCE hInstance, LPCSTR pszName )
-{
-	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pszName ) );
-
-	return reinterpret_cast<LoadIconA_t>( s_pLoadIconA )( ResourceModule( bOwn, hInstance ), pszName );
-}
-
-static HICON WINAPI HookLoadIconW( HINSTANCE hInstance, LPCWSTR pwszName )
-{
-	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ) );
-
-	return reinterpret_cast<LoadIconW_t>( s_pLoadIconW )( ResourceModule( bOwn, hInstance ), pwszName );
+	return reinterpret_cast<LoadIcon_t<Char_t>>( *ppOriginal )( ResourceModule( bOwn, hInstance ), pName );
 }
 
 //-----------------------------------------------------------------------------
 // Hooks of the comctl32 imports: image lists load the check box strip through them
 //-----------------------------------------------------------------------------
 
-static HANDLE WINAPI HookComctlLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
+template <typename Char_t, FARPROC *ppOriginal>
+static HANDLE WINAPI HookComctlLoadImage( HINSTANCE hInstance, const Char_t *pName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
-	HANDLE hStrip = LoadCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), nType, nFlags );
+	HANDLE hStrip = LoadCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pName ), nType, nFlags );
 
 	if ( hStrip )
 	{
 		return hStrip;
 	}
 
-	return reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( hInstance, pszName, nType, nWidth, nHeight, nFlags );
-}
-
-static HANDLE WINAPI HookComctlLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
-{
-	HANDLE hStrip = LoadCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), nType, nFlags );
-
-	if ( hStrip )
-	{
-		return hStrip;
-	}
-
-	return reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( hInstance, pwszName, nType, nWidth, nHeight, nFlags );
+	return reinterpret_cast<LoadImage_t<Char_t>>( *ppOriginal )( hInstance, pName, nType, nWidth, nHeight, nFlags );
 }
 
 //-----------------------------------------------------------------------------
@@ -421,16 +381,16 @@ int Icons_HookModule( HMODULE hHammer )
 
 	const ImportHook_t hooks[] =
 	{
-		{ s_pFindResourceA,   reinterpret_cast<void *>( &HookFindResourceA )   },
-		{ s_pFindResourceW,   reinterpret_cast<void *>( &HookFindResourceW )   },
-		{ s_pFindResourceExW, reinterpret_cast<void *>( &HookFindResourceExW ) },
-		{ s_pLoadResource,    reinterpret_cast<void *>( &HookLoadResource )    },
-		{ s_pSizeofResource,  reinterpret_cast<void *>( &HookSizeofResource )  },
-		{ s_pLoadBitmapW,     reinterpret_cast<void *>( &HookLoadBitmapW )     },
-		{ s_pLoadImageA,      reinterpret_cast<void *>( &HookLoadImageA )      },
-		{ s_pLoadImageW,      reinterpret_cast<void *>( &HookLoadImageW )      },
-		{ s_pLoadIconA,       reinterpret_cast<void *>( &HookLoadIconA )       },
-		{ s_pLoadIconW,       reinterpret_cast<void *>( &HookLoadIconW )       },
+		{ s_pFindResourceA,   reinterpret_cast<void *>( &HookFindResource<char, &s_pFindResourceA> )    },
+		{ s_pFindResourceW,   reinterpret_cast<void *>( &HookFindResource<wchar_t, &s_pFindResourceW> ) },
+		{ s_pFindResourceExW, reinterpret_cast<void *>( &HookFindResourceExW )                          },
+		{ s_pLoadResource,    reinterpret_cast<void *>( &HookLoadResource )                             },
+		{ s_pSizeofResource,  reinterpret_cast<void *>( &HookSizeofResource )                           },
+		{ s_pLoadBitmapW,     reinterpret_cast<void *>( &HookLoadBitmapW )                              },
+		{ s_pLoadImageA,      reinterpret_cast<void *>( &HookLoadImage<char, &s_pLoadImageA> )          },
+		{ s_pLoadImageW,      reinterpret_cast<void *>( &HookLoadImage<wchar_t, &s_pLoadImageW> )       },
+		{ s_pLoadIconA,       reinterpret_cast<void *>( &HookLoadIcon<char, &s_pLoadIconA> )            },
+		{ s_pLoadIconW,       reinterpret_cast<void *>( &HookLoadIcon<wchar_t, &s_pLoadIconW> )         },
 	};
 
 	return HookImports( hHammer, hooks, ARRAYSIZE( hooks ) );
@@ -445,8 +405,8 @@ int Icons_HookComctl( HMODULE hComctl )
 
 	const ImportHook_t hooks[] =
 	{
-		{ s_pLoadImageA, reinterpret_cast<void *>( &HookComctlLoadImageA ) },
-		{ s_pLoadImageW, reinterpret_cast<void *>( &HookComctlLoadImageW ) },
+		{ s_pLoadImageA, reinterpret_cast<void *>( &HookComctlLoadImage<char, &s_pLoadImageA> )    },
+		{ s_pLoadImageW, reinterpret_cast<void *>( &HookComctlLoadImage<wchar_t, &s_pLoadImageW> ) },
 	};
 
 	return HookImports( hComctl, hooks, ARRAYSIZE( hooks ) );
