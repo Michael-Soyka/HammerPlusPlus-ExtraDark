@@ -47,14 +47,29 @@ static FARPROC s_pLoadIconW       = nullptr;
 // Visgroup tree check boxes: unchecked, unchecked, checked, partly checked
 static const ULONG_PTR s_nCheckStrip = 223;
 static const int s_nCheckCell = 16;
+static const int s_nCheckStates[] = { CBS_UNCHECKEDNORMAL, CBS_UNCHECKEDNORMAL, CBS_CHECKEDNORMAL, CBS_MIXEDNORMAL };
 
-// Image list mask color of the strip: the cell outside the glyph
+// Image list mask color of the strip, white: the cell outside the glyph. Inside the glyphs
+// the white pixels become the nearest other color
 static const COLORREF s_CheckMask = RGB( 255, 255, 255 );
+static const DWORD s_nMaskPixel = 0x00FFFFFF;
+static const DWORD s_nNearMaskPixel = 0x00FEFEFE;
 
 static COLORREF s_Background = RGB( 30, 30, 30 );
 
-static HBITMAP CreateCheckStrip();
-static bool IsCheckStrip( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags );
+//-----------------------------------------------------------------------------
+// Own resources
+//-----------------------------------------------------------------------------
+
+static bool IsHammer( HMODULE hModule )
+{
+	return s_hHammer && hModule == s_hHammer;
+}
+
+static HRSRC FindSelfResource( ULONG_PTR nName, ULONG_PTR nType )
+{
+	return reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( s_hSelf, MAKEINTRESOURCEW( nName ), MAKEINTRESOURCEW( nType ) );
+}
 
 static bool IsOwnResource( HRSRC hResource )
 {
@@ -69,19 +84,24 @@ static bool IsOwnResource( HRSRC hResource )
 	return false;
 }
 
-// Our bitmap for a request to the Hammer++ DLL by numeric id, null for anything else
-static HRSRC FindOwnBitmap( HMODULE hModule, ULONG_PTR nName, ULONG_PTR nType )
+static void RememberOwnResource( HRSRC hResource )
 {
-	if ( !s_hHammer || hModule != s_hHammer || !IS_INTRESOURCE( nName ) || nType != s_nBitmapType )
-	{
-		return nullptr;
-	}
-
-	HRSRC hResource = reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( s_hSelf, MAKEINTRESOURCEW( nName ), MAKEINTRESOURCEW( s_nBitmapType ) );
 	if ( hResource && !IsOwnResource( hResource ) && s_nOwnResources < ARRAYSIZE( s_hOwnResources ) )
 	{
 		s_hOwnResources[s_nOwnResources++] = hResource;
 	}
+}
+
+// Our bitmap for a request to the Hammer++ DLL by numeric id, null for anything else
+static HRSRC FindOwnBitmap( HMODULE hModule, ULONG_PTR nName, ULONG_PTR nType )
+{
+	if ( !IsHammer( hModule ) || !IS_INTRESOURCE( nName ) || nType != s_nBitmapType )
+	{
+		return nullptr;
+	}
+
+	HRSRC hResource = FindSelfResource( nName, s_nBitmapType );
+	RememberOwnResource( hResource );
 
 	return hResource;
 }
@@ -89,125 +109,85 @@ static HRSRC FindOwnBitmap( HMODULE hModule, ULONG_PTR nName, ULONG_PTR nType )
 // Our icon for a request to the Hammer++ DLL by numeric id: user32 then reads it from our module
 static bool HasOwnIcon( HMODULE hModule, ULONG_PTR nName )
 {
-	const bool bOwn = s_hHammer && hModule == s_hHammer && IS_INTRESOURCE( nName ) &&
-		reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( s_hSelf, MAKEINTRESOURCEW( nName ), MAKEINTRESOURCEW( s_nIconType ) );
-
-	return bOwn;
+	return IsHammer( hModule ) && IS_INTRESOURCE( nName ) && FindSelfResource( nName, s_nIconType );
 }
 
-// Image of LoadImage taken from our module
-static bool IsOwnImage( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags )
+// Module LoadImage takes the image from: ours when we have it
+static HINSTANCE ImageModule( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags )
 {
 	if ( nFlags & LR_LOADFROMFILE )
 	{
-		return false;
+		return hInstance;
 	}
 
 	const bool bOwn = ( nType == IMAGE_BITMAP && FindOwnBitmap( hInstance, nName, s_nBitmapType ) ) || ( nType == IMAGE_ICON && HasOwnIcon( hInstance, nName ) );
-
-	return bOwn;
+	return bOwn ? s_hSelf : hInstance;
 }
 
-static HRSRC WINAPI HookFindResourceA( HMODULE hModule, LPCSTR pszName, LPCSTR pszType )
+//-----------------------------------------------------------------------------
+// Visgroup check box strip, drawn by the dark theme
+//-----------------------------------------------------------------------------
+
+static RECT CheckGlyphBox( int nCell, const SIZE &glyph )
 {
-	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pszName ), reinterpret_cast<ULONG_PTR>( pszType ) );
-	if ( !hResource )
+	RECT box;
+	box.left = ( nCell * s_nCheckCell ) + ( ( s_nCheckCell - glyph.cx ) / 2 );
+	box.top = ( s_nCheckCell - glyph.cy ) / 2;
+	box.right = box.left + glyph.cx;
+	box.bottom = box.top + glyph.cy;
+
+	return box;
+}
+
+static SIZE CheckGlyphSize( HTHEME hTheme, HDC hDC )
+{
+	SIZE glyph = { 13, 13 };
+	GetThemePartSize( hTheme, hDC, BP_CHECKBOX, CBS_UNCHECKEDNORMAL, nullptr, TS_DRAW, &glyph );
+	glyph.cx = min( glyph.cx, static_cast<LONG>( s_nCheckCell ) );
+	glyph.cy = min( glyph.cy, static_cast<LONG>( s_nCheckCell ) );
+
+	return glyph;
+}
+
+static void FillWith( HDC hDC, const RECT &rect, COLORREF color )
+{
+	HBRUSH hBrush = CreateSolidBrush( color );
+	FillRect( hDC, &rect, hBrush );
+	DeleteObject( hBrush );
+}
+
+// Rounded corners blend into the tree background, not into the mask
+static void DrawCheckGlyphs( HTHEME hTheme, HDC hDC, const SIZE &glyph )
+{
+	for ( int i = 0; i < ARRAYSIZE( s_nCheckStates ); i++ )
 	{
-		hResource = reinterpret_cast<FindResourceA_t>( s_pFindResourceA )( hModule, pszName, pszType );
+		const RECT box = CheckGlyphBox( i, glyph );
+		FillWith( hDC, box, s_Background );
+		DrawThemeBackground( hTheme, hDC, BP_CHECKBOX, s_nCheckStates[i], &box, nullptr );
 	}
-
-	return hResource;
 }
 
-static HRSRC WINAPI HookFindResourceW( HMODULE hModule, LPCWSTR pwszName, LPCWSTR pwszType )
+static void KeepGlyphsOpaque( DWORD *pPixels, int nWidth, const SIZE &glyph )
 {
-	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pwszName ), reinterpret_cast<ULONG_PTR>( pwszType ) );
-	if ( !hResource )
+	for ( int i = 0; i < ARRAYSIZE( s_nCheckStates ); i++ )
 	{
-		hResource = reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( hModule, pwszName, pwszType );
-	}
-
-	return hResource;
-}
-
-static HRSRC WINAPI HookFindResourceExW( HMODULE hModule, LPCWSTR pwszType, LPCWSTR pwszName, WORD nLanguage )
-{
-	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pwszName ), reinterpret_cast<ULONG_PTR>( pwszType ) );
-	if ( !hResource )
-	{
-		hResource = reinterpret_cast<FindResourceExW_t>( s_pFindResourceExW )( hModule, pwszType, pwszName, nLanguage );
-	}
-
-	return hResource;
-}
-
-static HGLOBAL WINAPI HookLoadResource( HMODULE hModule, HRSRC hResource )
-{
-	HGLOBAL hData = reinterpret_cast<LoadResource_t>( s_pLoadResource )( IsOwnResource( hResource ) ? s_hSelf : hModule, hResource );
-	return hData;
-}
-
-static DWORD WINAPI HookSizeofResource( HMODULE hModule, HRSRC hResource )
-{
-	const DWORD nSize = reinterpret_cast<SizeofResource_t>( s_pSizeofResource )( IsOwnResource( hResource ) ? s_hSelf : hModule, hResource );
-	return nSize;
-}
-
-static HBITMAP WINAPI HookLoadBitmapW( HINSTANCE hInstance, LPCWSTR pwszName )
-{
-	const bool bOwn = FindOwnBitmap( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), s_nBitmapType ) != nullptr;
-	HBITMAP hBitmap = reinterpret_cast<LoadBitmapW_t>( s_pLoadBitmapW )( bOwn ? s_hSelf : hInstance, pwszName );
-	return hBitmap;
-}
-
-static HANDLE WINAPI HookLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
-{
-	if ( IsCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), nType, nFlags ) )
-	{
-		HANDLE hStrip = CreateCheckStrip();
-		if ( hStrip )
+		const RECT box = CheckGlyphBox( i, glyph );
+		for ( LONG y = box.top; y < box.bottom; y++ )
 		{
-			return hStrip;
+			for ( LONG x = box.left; x < box.right; x++ )
+			{
+				DWORD &pixel = pPixels[( y * nWidth ) + x];
+				if ( ( pixel & s_nMaskPixel ) == s_nMaskPixel )
+				{
+					pixel = s_nNearMaskPixel;
+				}
+			}
 		}
 	}
-
-	const bool bOwn = IsOwnImage( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), nType, nFlags );
-	HANDLE hImage = reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( bOwn ? s_hSelf : hInstance, pszName, nType, nWidth, nHeight, nFlags );
-	return hImage;
 }
 
-static HANDLE WINAPI HookLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
-{
-	if ( IsCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), nType, nFlags ) )
-	{
-		HANDLE hStrip = CreateCheckStrip();
-		if ( hStrip )
-		{
-			return hStrip;
-		}
-	}
-
-	const bool bOwn = IsOwnImage( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), nType, nFlags );
-	HANDLE hImage = reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( bOwn ? s_hSelf : hInstance, pwszName, nType, nWidth, nHeight, nFlags );
-	return hImage;
-}
-
-static HICON WINAPI HookLoadIconA( HINSTANCE hInstance, LPCSTR pszName )
-{
-	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pszName ) );
-	HICON hIcon = reinterpret_cast<LoadIconA_t>( s_pLoadIconA )( bOwn ? s_hSelf : hInstance, pszName );
-	return hIcon;
-}
-
-static HICON WINAPI HookLoadIconW( HINSTANCE hInstance, LPCWSTR pwszName )
-{
-	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ) );
-	HICON hIcon = reinterpret_cast<LoadIconW_t>( s_pLoadIconW )( bOwn ? s_hSelf : hInstance, pwszName );
-	return hIcon;
-}
-
-// Check box strip drawn by the dark theme. Made on request: the image list takes the bitmap
-// and deletes it, and the theme cannot be opened under the loader lock
+// Made on request: the image list takes the bitmap and deletes it, and the theme cannot be
+// opened under the loader lock
 static HBITMAP CreateCheckStrip()
 {
 	HTHEME hTheme = OpenThemeData( nullptr, L"DarkMode_Explorer::Button" );
@@ -216,8 +196,7 @@ static HBITMAP CreateCheckStrip()
 		return nullptr;
 	}
 
-	const int nStates[] = { CBS_UNCHECKEDNORMAL, CBS_UNCHECKEDNORMAL, CBS_CHECKEDNORMAL, CBS_MIXEDNORMAL };
-	const int nWidth = s_nCheckCell * ARRAYSIZE( nStates );
+	const int nWidth = s_nCheckCell * ARRAYSIZE( s_nCheckStates );
 
 	BITMAPINFO info = {};
 	info.bmiHeader.biSize = sizeof( info.bmiHeader );
@@ -230,95 +209,115 @@ static HBITMAP CreateCheckStrip()
 	DWORD *pPixels = nullptr;
 	HDC hDC = CreateCompatibleDC( nullptr );
 	HBITMAP hBitmap = CreateDIBSection( hDC, &info, DIB_RGB_COLORS, reinterpret_cast<void **>( &pPixels ), nullptr, 0 );
-	if ( !hBitmap )
+	if ( hBitmap )
 	{
-		DeleteDC( hDC );
-		CloseThemeData( hTheme );
-		return nullptr;
+		HGDIOBJ hOld = SelectObject( hDC, hBitmap );
+
+		FillWith( hDC, { 0, 0, nWidth, s_nCheckCell }, s_CheckMask );
+		const SIZE glyph = CheckGlyphSize( hTheme, hDC );
+		DrawCheckGlyphs( hTheme, hDC, glyph );
+		GdiFlush();
+		KeepGlyphsOpaque( pPixels, nWidth, glyph );
+
+		SelectObject( hDC, hOld );
 	}
 
-	HGDIOBJ hOld = SelectObject( hDC, hBitmap );
-
-	RECT all = { 0, 0, nWidth, s_nCheckCell };
-	HBRUSH hMask = CreateSolidBrush( s_CheckMask );
-	FillRect( hDC, &all, hMask );
-	DeleteObject( hMask );
-
-	SIZE glyph = { 13, 13 };
-	GetThemePartSize( hTheme, hDC, BP_CHECKBOX, CBS_UNCHECKEDNORMAL, nullptr, TS_DRAW, &glyph );
-	glyph.cx = min( glyph.cx, static_cast<LONG>( s_nCheckCell ) );
-	glyph.cy = min( glyph.cy, static_cast<LONG>( s_nCheckCell ) );
-
-	// Rounded corners blend into the tree background, not into the mask
-	HBRUSH hBack = CreateSolidBrush( s_Background );
-	for ( int i = 0; i < ARRAYSIZE( nStates ); i++ )
-	{
-		RECT box;
-		box.left = ( i * s_nCheckCell ) + ( ( s_nCheckCell - glyph.cx ) / 2 );
-		box.top = ( s_nCheckCell - glyph.cy ) / 2;
-		box.right = box.left + glyph.cx;
-		box.bottom = box.top + glyph.cy;
-
-		FillRect( hDC, &box, hBack );
-		DrawThemeBackground( hTheme, hDC, BP_CHECKBOX, nStates[i], &box, nullptr );
-	}
-
-	DeleteObject( hBack );
-	GdiFlush();
-
-	// Inside the glyphs nothing may come out in the mask color
-	const LONG nTop = ( s_nCheckCell - glyph.cy ) / 2;
-	for ( LONG y = nTop; y < nTop + glyph.cy; y++ )
-	{
-		for ( int i = 0; i < ARRAYSIZE( nStates ); i++ )
-		{
-			const LONG nLeft = ( i * s_nCheckCell ) + ( ( s_nCheckCell - glyph.cx ) / 2 );
-			for ( LONG x = nLeft; x < nLeft + glyph.cx; x++ )
-			{
-				DWORD &pixel = pPixels[( y * nWidth ) + x];
-				if ( ( pixel & 0x00FFFFFF ) == 0x00FFFFFF )
-				{
-					pixel = 0x00FEFEFE;
-				}
-			}
-		}
-	}
-
-	SelectObject( hDC, hOld );
 	DeleteDC( hDC );
 	CloseThemeData( hTheme );
 
 	return hBitmap;
 }
 
-static bool IsCheckStrip( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags )
+// The strip is generated whatever way it is loaded; null for every other image
+static HANDLE LoadCheckStrip( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags )
 {
-	const bool bStrip = s_hHammer && hInstance == s_hHammer && nType == IMAGE_BITMAP && !( nFlags & LR_LOADFROMFILE ) && nName == s_nCheckStrip;
-
-	return bStrip;
+	const bool bStrip = IsHammer( hInstance ) && nType == IMAGE_BITMAP && !( nFlags & LR_LOADFROMFILE ) && nName == s_nCheckStrip;
+	return bStrip ? CreateCheckStrip() : nullptr;
 }
+
+//-----------------------------------------------------------------------------
+// Hooks of the Hammer++ DLL imports
+//-----------------------------------------------------------------------------
+
+static HRSRC WINAPI HookFindResourceA( HMODULE hModule, LPCSTR pszName, LPCSTR pszType )
+{
+	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pszName ), reinterpret_cast<ULONG_PTR>( pszType ) );
+	return hResource ? hResource : reinterpret_cast<FindResourceA_t>( s_pFindResourceA )( hModule, pszName, pszType );
+}
+
+static HRSRC WINAPI HookFindResourceW( HMODULE hModule, LPCWSTR pwszName, LPCWSTR pwszType )
+{
+	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pwszName ), reinterpret_cast<ULONG_PTR>( pwszType ) );
+	return hResource ? hResource : reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( hModule, pwszName, pwszType );
+}
+
+static HRSRC WINAPI HookFindResourceExW( HMODULE hModule, LPCWSTR pwszType, LPCWSTR pwszName, WORD nLanguage )
+{
+	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pwszName ), reinterpret_cast<ULONG_PTR>( pwszType ) );
+	return hResource ? hResource : reinterpret_cast<FindResourceExW_t>( s_pFindResourceExW )( hModule, pwszType, pwszName, nLanguage );
+}
+
+static HGLOBAL WINAPI HookLoadResource( HMODULE hModule, HRSRC hResource )
+{
+	return reinterpret_cast<LoadResource_t>( s_pLoadResource )( IsOwnResource( hResource ) ? s_hSelf : hModule, hResource );
+}
+
+static DWORD WINAPI HookSizeofResource( HMODULE hModule, HRSRC hResource )
+{
+	return reinterpret_cast<SizeofResource_t>( s_pSizeofResource )( IsOwnResource( hResource ) ? s_hSelf : hModule, hResource );
+}
+
+static HBITMAP WINAPI HookLoadBitmapW( HINSTANCE hInstance, LPCWSTR pwszName )
+{
+	const bool bOwn = FindOwnBitmap( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), s_nBitmapType ) != nullptr;
+	return reinterpret_cast<LoadBitmapW_t>( s_pLoadBitmapW )( bOwn ? s_hSelf : hInstance, pwszName );
+}
+
+static HANDLE WINAPI HookLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
+{
+	const ULONG_PTR nName = reinterpret_cast<ULONG_PTR>( pszName );
+	HANDLE hStrip = LoadCheckStrip( hInstance, nName, nType, nFlags );
+	return hStrip ? hStrip : reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( ImageModule( hInstance, nName, nType, nFlags ), pszName, nType, nWidth, nHeight, nFlags );
+}
+
+static HANDLE WINAPI HookLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
+{
+	const ULONG_PTR nName = reinterpret_cast<ULONG_PTR>( pwszName );
+	HANDLE hStrip = LoadCheckStrip( hInstance, nName, nType, nFlags );
+	return hStrip ? hStrip : reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( ImageModule( hInstance, nName, nType, nFlags ), pwszName, nType, nWidth, nHeight, nFlags );
+}
+
+static HICON WINAPI HookLoadIconA( HINSTANCE hInstance, LPCSTR pszName )
+{
+	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pszName ) );
+	return reinterpret_cast<LoadIconA_t>( s_pLoadIconA )( bOwn ? s_hSelf : hInstance, pszName );
+}
+
+static HICON WINAPI HookLoadIconW( HINSTANCE hInstance, LPCWSTR pwszName )
+{
+	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ) );
+	return reinterpret_cast<LoadIconW_t>( s_pLoadIconW )( bOwn ? s_hSelf : hInstance, pwszName );
+}
+
+//-----------------------------------------------------------------------------
+// Hooks of the comctl32 imports: image lists load the check box strip through them
+//-----------------------------------------------------------------------------
 
 static HANDLE WINAPI HookComctlLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
-	HANDLE hImage = IsCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), nType, nFlags ) ? CreateCheckStrip() : nullptr;
-	if ( !hImage )
-	{
-		hImage = reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( hInstance, pszName, nType, nWidth, nHeight, nFlags );
-	}
-
-	return hImage;
+	HANDLE hStrip = LoadCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), nType, nFlags );
+	return hStrip ? hStrip : reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( hInstance, pszName, nType, nWidth, nHeight, nFlags );
 }
 
 static HANDLE WINAPI HookComctlLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
-	HANDLE hImage = IsCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), nType, nFlags ) ? CreateCheckStrip() : nullptr;
-	if ( !hImage )
-	{
-		hImage = reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( hInstance, pwszName, nType, nWidth, nHeight, nFlags );
-	}
-
-	return hImage;
+	HANDLE hStrip = LoadCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), nType, nFlags );
+	return hStrip ? hStrip : reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( hInstance, pwszName, nType, nWidth, nHeight, nFlags );
 }
+
+//-----------------------------------------------------------------------------
+// Setup
+//-----------------------------------------------------------------------------
 
 void Icons_Init( COLORREF background )
 {
@@ -367,8 +366,7 @@ int Icons_HookModule( HMODULE hHammer )
 		{ s_pLoadIconW,       reinterpret_cast<void *>( &HookLoadIconW )       },
 	};
 
-	const int nReplaced = HookImports( hHammer, hooks, ARRAYSIZE( hooks ) );
-	return nReplaced;
+	return HookImports( hHammer, hooks, ARRAYSIZE( hooks ) );
 }
 
 int Icons_HookComctl( HMODULE hComctl )
@@ -384,6 +382,5 @@ int Icons_HookComctl( HMODULE hComctl )
 		{ s_pLoadImageW, reinterpret_cast<void *>( &HookComctlLoadImageW ) },
 	};
 
-	const int nReplaced = HookImports( hComctl, hooks, ARRAYSIZE( hooks ) );
-	return nReplaced;
+	return HookImports( hComctl, hooks, ARRAYSIZE( hooks ) );
 }
