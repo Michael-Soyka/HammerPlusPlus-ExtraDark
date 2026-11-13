@@ -8,33 +8,23 @@ Our in-house patcher for [Hammer++](https://ficool2.github.io/HammerPlusPlus-Web
 English Version | [Русская версия](README_ru.md)
 
 What it does:
-- Forces Hammer++ to start through Vulkan (DXVK)
 - Dark theme
 
 ## Installation
 
 **Hammer++ must be closed.**
 
-To install the patch, run **patch.bat** (unpack the release first if you downloaded one).
+Run **hppxdark_setup.exe** (unpack the release first): enter the game `bin` folder, pick it with **Browse...** or drop it on the window, then press **Patch**. On a patched Hammer++ there are three buttons instead: **Remove** brings back the original, **Repatch** writes `hppxdark.dll` again (named **Update** when the installed one is outdated), **Launch** starts Hammer++.
 
-To restore the original, open a terminal in the patcher folder and run:
-```
-patch.bat -Restore
-```
+The window also shows the installed version next to the installer's one and whether it is outdated.
 
-Alternatively, from a terminal:
-```
-patch.bat C:\path\to\bin (-Restore)
-```
+The installer finds `hammerplusplus.exe` in `bin`, `bin\x64` or `bin\win64` and patches `hammerplusplus\bin\hammerplusplus_dll.dll` (the original is saved as `hammerplusplus_dll.dll.orig`). An install made by an earlier version of the patcher (a patched `hammerplusplus.exe`) is rolled back automatically.
 
 ## Configuration
 
-The `hppxdark.ini` file next to `hppxdark.dll`:
+The `hppxdark.ini` file next to `hppxdark.dll`, in `hammerplusplus\bin`:
 
 ```ini
-[ForceVulkan]
-Enabled=1    ; 0 - D3D9 (default) / 1 - auto -vulkan
-
 [DarkTheme]
 Enabled=1    ; 0 - light theme / 1 - custom dark theme
 ```
@@ -74,7 +64,7 @@ Text=220,220,220
 
 ## Requirements
 
-- Hammer++ (8872) for 64-bit Source SDK 2013 games, installed in the game's `bin/x64`
+- Hammer++ 8873, 32- or 64-bit: patching checked on the 2013mp, 2013sp, l4d2, portal2 (x86), gmod and tf2 (x64) builds
 - Visual Studio \>=2022
 - The "Desktop development with C++" workload
 - CMake (may come with the workload)
@@ -87,9 +77,17 @@ cmake -B build -A x64
 cmake --build build --config Release
 ```
 
+The result is `bin\hppxdark_setup.exe` with both proxy DLLs inside: the x64 configuration builds the x86 `hppxdark.dll` as a nested Win32 configuration. 
+## Versions
+
+`MAJOR.MINOR.BUILD.REVISION`, written on every build by `cmake/version.cmake`:
+- `MAJOR.MINOR` is set by hand in `project( hppxdark VERSION ... )` of `CMakeLists.txt`;
+- `BUILD` is the number of days since 2000-01-01, `REVISION` the seconds since midnight divided by 2 (UTC), the same scheme as .NET `1.0.*` versions.
+
+A later build always has a bigger version, the installer and both DLLs of one build share it. GitHub Actions builds add `-git` to the text version (`1.0.9812.38990-git`); the comparison goes by the numbers. The version goes to the version resource of `hppxdark.dll` and `hppxdark_setup.exe` (Properties - Details in Explorer); the installer compares the installed `hppxdark.dll` with its own.
+
 CMake options:
 - `HPPXDARK_LOG` - process logging, off by default.
-- `OTM_BUILD`    - for in-house builds.
 
 ## Authors
 

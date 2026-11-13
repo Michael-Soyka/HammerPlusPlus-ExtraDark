@@ -1,4 +1,4 @@
-//============ Copyright 2026 Moon-6 Team, All rights reserved. ===============//
+//=========== Copyright 2026 Michael Soyka, All rights reserved. ==============//
 //
 // Purpose: Debug log to hppxdark.log next to the DLL, built in with HPPXDARK_LOG
 //
@@ -17,5 +17,6 @@ std::wstring ModuleFilePath( const wchar_t *pwszName );
 	// Compiled out: no HPPXDARK_LOG in CMake
 	inline void Log( const char *, ... )
 	{
+		
 	}
 #endif

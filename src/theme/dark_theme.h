@@ -1,4 +1,4 @@
-//============ Copyright 2026 Moon-6 Team, All rights reserved. ===============//
+//=========== Copyright 2026 Michael Soyka, All rights reserved. ==============//
 //
 // Purpose: Dark theme for Hammer++: system colors, Windows dark mode, control colors
 //
@@ -6,7 +6,7 @@
 
 #pragma once
 
-// Call on the GUI thread before the first window is created, outside the loader lock.
+// Call from DllMain on the GUI thread, before hammerplusplus_dll.dll runs its initializers.
 // Does nothing when hppxdark.ini next to the DLL has [DarkTheme] Enabled=0
 void DarkTheme_Init();
 

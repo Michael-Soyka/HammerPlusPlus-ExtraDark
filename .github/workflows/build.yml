@@ -13,35 +13,26 @@ jobs:
   build:
     runs-on: windows-latest
 
-    strategy:
-      matrix:
-        include:
-          - name: HammerPlusPlus-ExtraDark
-            otm: OFF
-          - name: HammerPlusPlus-ExtraDark-OTM
-            otm: ON
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure
-        run: cmake -B build -A x64 -DOTM_BUILD=${{ matrix.otm }}
-
+      # The x64 configuration builds the x86 proxy DLL too and packs both into the installer
       - name: Build
-        run: cmake --build build --config Release
+        run: |
+          cmake -B build -A x64
+          cmake --build build --config Release
 
-      # Same layout as the repository: patch.ps1 takes the DLL from bin
+      - name: Stage
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item bin/hppxdark_setup.exe, README.md, README_ru.md, LICENSE dist
+
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
-          path: |
-            bin/hppxdark.dll
-            patch.ps1
-            patch.bat
-            README.md
-            README_ru.md
-            LICENSE
+          name: HammerPlusPlus-ExtraDark
+          path: dist/
           if-no-files-found: error
 
   release:
