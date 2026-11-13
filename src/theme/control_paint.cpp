@@ -29,7 +29,11 @@ struct ControlFont_t
 		: m_hDC( hDC )
 	{
 		HFONT hFont = reinterpret_cast<HFONT>( SendMessageW( hWnd, WM_GETFONT, 0, 0 ) );
-		m_hOld = hFont ? SelectObject( hDC, hFont ) : nullptr;
+
+		if ( hFont )
+		{
+			m_hOld = SelectObject( hDC, hFont );
+		}
 	}
 
 	~ControlFont_t()
@@ -41,12 +45,22 @@ struct ControlFont_t
 	}
 
 	HDC		m_hDC;
-	HGDIOBJ	m_hOld;
+	HGDIOBJ	m_hOld = nullptr;
 };
 
 //-----------------------------------------------------------------------------
 // Colors and plain fills
 //-----------------------------------------------------------------------------
+
+static COLORREF TextColor( bool bEnabled )
+{
+	if ( bEnabled )
+	{
+		return g_ColorText;
+	}
+
+	return g_ColorGrayText;
+}
 
 LRESULT CtlColor( UINT nMsg, HDC hDC, LRESULT nDefault )
 {
@@ -56,11 +70,18 @@ LRESULT CtlColor( UINT nMsg, HDC hDC, LRESULT nDefault )
 		return nDefault;
 	}
 
-	const bool bEdit = nMsg == WM_CTLCOLOREDIT || nMsg == WM_CTLCOLORLISTBOX;
 	SetTextColor( hDC, g_ColorText );
-	SetBkColor( hDC, bEdit ? g_ColorEdit : g_ColorFace );
 
-	return reinterpret_cast<LRESULT>( bEdit ? EditBrush() : DarkBrush( COLOR_BTNFACE ) );
+	if ( nMsg == WM_CTLCOLOREDIT || nMsg == WM_CTLCOLORLISTBOX )
+	{
+		SetBkColor( hDC, g_ColorEdit );
+
+		return reinterpret_cast<LRESULT>( EditBrush() );
+	}
+
+	SetBkColor( hDC, g_ColorFace );
+
+	return reinterpret_cast<LRESULT>( DarkBrush( COLOR_BTNFACE ) );
 }
 
 void PaintFlat( HWND hWnd )
@@ -68,6 +89,7 @@ void PaintFlat( HWND hWnd )
 	PAINTSTRUCT paint;
 	HDC hDC = BeginPaint( hWnd, &paint );
 	FillRect( hDC, &paint.rcPaint, DarkBrush( COLOR_BTNFACE ) );
+
 	EndPaint( hWnd, &paint );
 }
 
@@ -93,6 +115,7 @@ void PaintSplitter( HWND hWnd )
 	}
 
 	FillRect( hDC, &paint.rcPaint, DarkBrush( COLOR_BTNFACE ) );
+
 	EndPaint( hWnd, &paint );
 }
 
@@ -109,6 +132,7 @@ void PaintToolbarNonClient( HWND hWnd )
 	HDC hDC = GetWindowDC( hWnd );
 	ExcludeClipRect( hDC, client.left, client.top, client.right, client.bottom );
 	FillRect( hDC, &window, DarkBrush( COLOR_BTNFACE ) );
+
 	ReleaseDC( hWnd, hDC );
 }
 
@@ -127,6 +151,7 @@ void PaintScrollCorner( HWND hWnd )
 
 	HDC hDC = GetWindowDC( hWnd );
 	FillRect( hDC, &corner, DarkBrush( COLOR_BTNFACE ) );
+
 	ReleaseDC( hWnd, hDC );
 }
 
@@ -148,12 +173,19 @@ void PaintClientEdge( HWND hWnd )
 		return;
 	}
 
-	RECT rect = WindowRectAtOrigin( hWnd );
+	RECT rect     = WindowRectAtOrigin( hWnd );
+	HBRUSH hInner = DarkBrush( COLOR_WINDOW );
+
+	if ( bEdit )
+	{
+		hInner = EditBrush();
+	}
 
 	HDC hDC = GetWindowDC( hWnd );
 	FrameRect( hDC, &rect, BorderBrush() );
 	InflateRect( &rect, -1, -1 );
-	FrameRect( hDC, &rect, bEdit ? EditBrush() : DarkBrush( COLOR_WINDOW ) );
+	FrameRect( hDC, &rect, hInner );
+
 	ReleaseDC( hWnd, hDC );
 }
 
@@ -191,7 +223,7 @@ static RECT PaintTabBody( HWND hWnd, HDC hDC )
 	InflateRect( &body, 2, 2 );
 
 	const int nSaved = SaveDC( hDC );
-	RECT inside = body;
+	RECT inside      = body;
 	InflateRect( &inside, -1, -1 );
 	ExcludeClipRect( hDC, inside.left, inside.top, inside.right, inside.bottom );
 	FillRect( hDC, &client, DarkBrush( COLOR_BTNFACE ) );
@@ -206,23 +238,24 @@ static RECT PaintTabBody( HWND hWnd, HDC hDC )
 static void DrawTabText( HWND hWnd, HDC hDC, int nTab, RECT &rect )
 {
 	const UINT nFormat = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_HIDEPREFIX;
+
 	if ( IsWindowUnicode( hWnd ) )
 	{
-		wchar_t wszText[128] = {};
-		TCITEMW item = {};
-		item.mask = TCIF_TEXT;
-		item.pszText = wszText;
-		item.cchTextMax = ARRAYSIZE( wszText );
+		wchar_t wszText[ 128 ] = {};
+		TCITEMW item         = {};
+		item.mask            = TCIF_TEXT;
+		item.pszText         = wszText;
+		item.cchTextMax      = ARRAYSIZE( wszText );
 		SendMessageW( hWnd, TCM_GETITEMW, nTab, reinterpret_cast<LPARAM>( &item ) );
 		DrawTextW( hDC, wszText, -1, &rect, nFormat );
 	}
 	else
 	{
-		char szText[128] = {};
-		TCITEMA item = {};
-		item.mask = TCIF_TEXT;
-		item.pszText = szText;
-		item.cchTextMax = ARRAYSIZE( szText );
+		char szText[ 128 ] = {};
+		TCITEMA item     = {};
+		item.mask        = TCIF_TEXT;
+		item.pszText     = szText;
+		item.cchTextMax  = ARRAYSIZE( szText );
 		SendMessageA( hWnd, TCM_GETITEMA, nTab, reinterpret_cast<LPARAM>( &item ) );
 		DrawTextA( hDC, szText, -1, &rect, nFormat );
 	}
@@ -237,7 +270,14 @@ static void PaintTab( HWND hWnd, HDC hDC, int nTab, bool bSelected, const RECT &
 		return;
 	}
 
-	FillRect( hDC, &tab, DarkBrush( bSelected ? COLOR_BTNFACE : COLOR_WINDOW ) );
+	int nFace = COLOR_WINDOW;
+
+	if ( bSelected )
+	{
+		nFace = COLOR_BTNFACE;
+	}
+
+	FillRect( hDC, &tab, DarkBrush( nFace ) );
 	FrameRect( hDC, &tab, BorderBrush() );
 
 	// The selected tab opens into the body
@@ -247,7 +287,7 @@ static void PaintTab( HWND hWnd, HDC hDC, int nTab, bool bSelected, const RECT &
 		FillRect( hDC, &gap, DarkBrush( COLOR_BTNFACE ) );
 	}
 
-	SetTextColor( hDC, bSelected ? g_ColorText : g_ColorGrayText );
+	SetTextColor( hDC, TextColor( bSelected ) );
 	DrawTabText( hWnd, hDC, nTab, tab );
 }
 
@@ -263,7 +303,8 @@ void PaintTabControl( HWND hWnd )
 		SetBkMode( hDC, TRANSPARENT );
 
 		const int nSelected = TabCtrl_GetCurSel( hWnd );
-		const int nCount = TabCtrl_GetItemCount( hWnd );
+		const int nCount    = TabCtrl_GetItemCount( hWnd );
+
 		for ( int i = 0; i < nCount; i++ )
 		{
 			PaintTab( hWnd, hDC, i, i == nSelected, body );
@@ -283,6 +324,7 @@ void PaintStatusBarBorders( HWND hWnd )
 	const int nParts = static_cast<int>( SendMessageW( hWnd, SB_GETPARTS, 0, 0 ) );
 
 	HDC hDC = GetDC( hWnd );
+
 	for ( int i = 0; i < nParts; i++ )
 	{
 		RECT rect;
@@ -311,12 +353,20 @@ void PaintGroupBox( HWND hWnd )
 	{
 		const ControlFont_t font( hWnd, hDC );
 
-	wchar_t wszText[ 256 ] = {};
-	const int nLength      = GetWindowTextW( hWnd, wszText, ARRAYSIZE( wszText ) );
+		wchar_t wszText[ 256 ] = {};
+		const int nLength      = GetWindowTextW( hWnd, wszText, ARRAYSIZE( wszText ) );
 
 		// An empty caption still keeps the line at half the text height
 		SIZE textSize = {};
-		GetTextExtentPoint32W( hDC, nLength ? wszText : L"X", nLength ? nLength : 1, &textSize );
+
+		if ( nLength )
+		{
+			GetTextExtentPoint32W( hDC, wszText, nLength, &textSize );
+		}
+		else
+		{
+			GetTextExtentPoint32W( hDC, L"X", 1, &textSize );
+		}
 
 		RECT client;
 		GetClientRect( hWnd, &client );
@@ -331,7 +381,7 @@ void PaintGroupBox( HWND hWnd )
 			FillRect( hDC, &caption, DarkBrush( COLOR_BTNFACE ) );
 
 			SetBkMode( hDC, TRANSPARENT );
-			SetTextColor( hDC, IsWindowEnabled( hWnd ) ? g_ColorText : g_ColorGrayText );
+			SetTextColor( hDC, TextColor( IsWindowEnabled( hWnd ) != FALSE ) );
 			DrawTextW( hDC, wszText, nLength, &caption, DT_CENTER | DT_SINGLELINE | DT_HIDEPREFIX );
 		}
 	}
@@ -450,7 +500,12 @@ static int CheckValue( const CheckButton_t &button )
 		return 1;
 	}
 
-	return ( button.m_nState & BST_INDETERMINATE ) ? 2 : 0;
+	if ( button.m_nState & BST_INDETERMINATE )
+	{
+		return 2;
+	}
+
+	return 0;
 }
 
 // Part states go in fours, one four per check value: normal, hot, pressed, disabled
@@ -482,36 +537,70 @@ static LONG AlignVertically( LONG_PTR nVertical, LONG nHeight, LONG nArea )
 		return 0;
 	}
 
-	return nVertical == BS_BOTTOM ? nArea - nHeight : ( nArea - nHeight ) / 2;
+	if ( nVertical == BS_BOTTOM )
+	{
+		return nArea - nHeight;
+	}
+
+	return ( nArea - nHeight ) / 2;
 }
 
 // Returns where the glyph went
 static RECT DrawCheckGlyph( HWND hWnd, HDC hDC, const CheckButton_t &button, const RECT &client )
 {
-	const int nPart = button.m_bRadio ? BP_RADIOBUTTON : BP_CHECKBOX;
 	const int nPartState = CheckPartState( button );
+	int nPart            = BP_CHECKBOX;
+
+	if ( button.m_bRadio )
+	{
+		nPart = BP_RADIOBUTTON;
+	}
 
 	HTHEME hTheme = OpenThemeData( hWnd, L"Button" );
-	SIZE glyph = s_DefaultGlyph;
+	SIZE glyph    = s_DefaultGlyph;
+
 	if ( hTheme )
 	{
 		GetThemePartSize( hTheme, hDC, nPart, nPartState, nullptr, TS_DRAW, &glyph );
 	}
 
 	RECT box;
-	box.left = ( button.m_nStyle & BS_LEFTTEXT ) ? client.right - glyph.cx : 0;
-	box.right = box.left + glyph.cx;
-	box.top = AlignVertically( button.m_nStyle & BS_VCENTER, glyph.cy, client.bottom );
+	box.left = 0;
+
+	if ( button.m_nStyle & BS_LEFTTEXT )
+	{
+		box.left = client.right - glyph.cx;
+	}
+
+	box.right  = box.left + glyph.cx;
+	box.top    = AlignVertically( button.m_nStyle & BS_VCENTER, glyph.cy, client.bottom );
 	box.bottom = box.top + glyph.cy;
 
 	if ( hTheme )
 	{
 		DrawThemeBackground( hTheme, hDC, nPart, nPartState, &box, nullptr );
+
 		CloseThemeData( hTheme );
 	}
 	else
 	{
-		const UINT nFrame = ( button.m_bRadio ? DFCS_BUTTONRADIO : DFCS_BUTTONCHECK ) | ( CheckValue( button ) ? DFCS_CHECKED : 0 ) | ( button.m_bEnabled ? 0 : DFCS_INACTIVE );
+		UINT nFrame = DFCS_BUTTONCHECK;
+
+		if ( button.m_bRadio )
+		{
+			nFrame = DFCS_BUTTONRADIO;
+		}
+
+		if ( CheckValue( button ) )
+		{
+			nFrame |= DFCS_CHECKED;
+		}
+
+		if ( !button.m_bEnabled )
+		{
+			nFrame |= DFCS_INACTIVE;
+		}
+
 		DrawFrameControl( hDC, &box, DFC_BUTTON, nFrame );
 	}
 
@@ -522,9 +611,30 @@ static UINT CaptionFormat( const CheckButton_t &button )
 {
 	const LONG_PTR nHorizontal = button.m_nStyle & BS_CENTER;
 
-	UINT nFormat = ( button.m_nStyle & BS_MULTILINE ) ? DT_WORDBREAK : DT_SINGLELINE;
-	nFormat |= nHorizontal == BS_CENTER ? DT_CENTER : ( nHorizontal == BS_RIGHT ? DT_RIGHT : DT_LEFT );
-	nFormat |= ( button.m_nUiState & UISF_HIDEACCEL ) ? DT_HIDEPREFIX : 0;
+	UINT nFormat = DT_SINGLELINE;
+
+	if ( button.m_nStyle & BS_MULTILINE )
+	{
+		nFormat = DT_WORDBREAK;
+	}
+
+	if ( nHorizontal == BS_CENTER )
+	{
+		nFormat |= DT_CENTER;
+	}
+	else if ( nHorizontal == BS_RIGHT )
+	{
+		nFormat |= DT_RIGHT;
+	}
+	else
+	{
+		nFormat |= DT_LEFT;
+	}
+
+	if ( button.m_nUiState & UISF_HIDEACCEL )
+	{
+		nFormat |= DT_HIDEPREFIX;
+	}
 
 	return nFormat;
 }
@@ -581,7 +691,7 @@ static void DrawCaption( HWND hWnd, HDC hDC, const CheckButton_t &button, const 
 	text.bottom = text.top + nTextHeight;
 
 	SetBkMode( hDC, TRANSPARENT );
-	SetTextColor( hDC, button.m_bEnabled ? g_ColorText : g_ColorGrayText );
+	SetTextColor( hDC, TextColor( button.m_bEnabled ) );
 	DrawTextW( hDC, wszText, nLength, &text, nFormat );
 
 	if ( ( button.m_nState & BST_FOCUS ) && !( button.m_nUiState & UISF_HIDEFOCUS ) )
@@ -593,10 +703,20 @@ static void DrawCaption( HWND hWnd, HDC hDC, const CheckButton_t &button, const 
 // The background the parent gives its static controls, dark when it leaves the default
 static HBRUSH CheckButtonBackground( HWND hWnd, HDC hDC )
 {
-	HWND hParent = GetParent( hWnd );
-	HBRUSH hBrush = hParent ? reinterpret_cast<HBRUSH>( SendMessageW( hParent, WM_CTLCOLORSTATIC, reinterpret_cast<WPARAM>( hDC ), reinterpret_cast<LPARAM>( hWnd ) ) ) : nullptr;
+	HWND hParent  = GetParent( hWnd );
+	HBRUSH hBrush = nullptr;
 
-	return IsSystemBrush( hBrush ) ? DarkBrush( COLOR_BTNFACE ) : hBrush;
+	if ( hParent )
+	{
+		hBrush = reinterpret_cast<HBRUSH>( SendMessageW( hParent, WM_CTLCOLORSTATIC, reinterpret_cast<WPARAM>( hDC ), reinterpret_cast<LPARAM>( hWnd ) ) );
+	}
+
+	if ( IsSystemBrush( hBrush ) )
+	{
+		return DarkBrush( COLOR_BTNFACE );
+	}
+
+	return hBrush;
 }
 
 void PrintCheckButton( HWND hWnd, HDC hTarget )
@@ -609,8 +729,8 @@ void PrintCheckButton( HWND hWnd, HDC hTarget )
 		return;
 	}
 
-	HDC hDC = CreateCompatibleDC( hTarget );
-	HBITMAP hBitmap = CreateCompatibleBitmap( hTarget, client.right, client.bottom );
+	HDC hDC            = CreateCompatibleDC( hTarget );
+	HBITMAP hBitmap    = CreateCompatibleBitmap( hTarget, client.right, client.bottom );
 	HGDIOBJ hOldBitmap = SelectObject( hDC, hBitmap );
 
 	FillRect( hDC, &client, CheckButtonBackground( hWnd, hDC ) );
@@ -618,6 +738,7 @@ void PrintCheckButton( HWND hWnd, HDC hTarget )
 	{
 		const ControlFont_t font( hWnd, hDC );
 		const CheckButton_t button = ReadCheckButton( hWnd );
+
 		const RECT box = DrawCheckGlyph( hWnd, hDC, button, client );
 		DrawCaption( hWnd, hDC, button, client, box );
 
@@ -634,6 +755,7 @@ void PaintCheckButton( HWND hWnd )
 	PAINTSTRUCT paint;
 	HDC hDC = BeginPaint( hWnd, &paint );
 	PrintCheckButton( hWnd, hDC );
+
 	EndPaint( hWnd, &paint );
 }
 
@@ -647,6 +769,7 @@ void RepaintCheckButton( HWND hWnd )
 
 	HDC hDC = GetDC( hWnd );
 	PrintCheckButton( hWnd, hDC );
+
 	ReleaseDC( hWnd, hDC );
 }
 
@@ -689,11 +812,25 @@ static void DrawUpDownArrow( HDC hDC, const RECT &half, bool bHorizontal, bool b
 	const LONG nY        = ( half.top + half.bottom ) / 2;
 	const LONG nSize     = max( 2L, min( half.right - half.left, half.bottom - half.top ) / 4 );
 	const LONG nHalfSize = nSize / 2;
-	const LONG nCenter = bHorizontal ? nX : nY;
-	const LONG nTip = bFirst ? nCenter - nHalfSize : nCenter + nHalfSize;
-	const LONG nBase = bFirst ? nCenter + nHalfSize : nCenter - nHalfSize;
 
-	POINT points[3];
+	LONG nCenter = nY;
+
+	if ( bHorizontal )
+	{
+		nCenter = nX;
+	}
+
+	LONG nTip  = nCenter + nHalfSize;
+	LONG nBase = nCenter - nHalfSize;
+
+	if ( bFirst )
+	{
+		nTip  = nCenter - nHalfSize;
+		nBase = nCenter + nHalfSize;
+	}
+
+	POINT points[ 3 ];
+
 	if ( bHorizontal )
 	{
 		points[ 0 ] = { nTip, nY };
@@ -728,7 +865,8 @@ void PaintUpDown( HWND hWnd )
 	ScreenToClient( hWnd, &cursor );
 
 	const UpDownHalves_t halves = SplitUpDown( client, bHorizontal );
-	const COLORREF arrow = bEnabled ? g_ColorText : g_ColorGrayText;
+
+	const COLORREF arrow = TextColor( bEnabled );
 
 	const int nSaved = SaveDC( hDC );
 	SelectObject( hDC, GetStockObject( DC_BRUSH ) );
@@ -736,12 +874,18 @@ void PaintUpDown( HWND hWnd )
 
 	for ( int i = 0; i < ARRAYSIZE( halves.m_Half ); i++ )
 	{
-		const RECT &half = halves.m_Half[i];
-		const bool bHot = bEnabled && ( bOver || bCaptured ) && PtInRect( &half, cursor );
-		COLORREF fill = g_ColorFace;
+		const RECT &half = halves.m_Half[ i ];
+		const bool bHot  = bEnabled && ( bOver || bCaptured ) && PtInRect( &half, cursor );
+		COLORREF fill    = g_ColorFace;
+
 		if ( bHot )
 		{
-			fill = bCaptured ? g_ColorHilight : g_ColorMenuHot;
+			fill = g_ColorMenuHot;
+
+			if ( bCaptured )
+			{
+				fill = g_ColorHilight;
+			}
 		}
 
 		SetDCBrushColor( hDC, fill );
@@ -785,20 +929,33 @@ LRESULT ToolbarCustomDraw( NMTBCUSTOMDRAW *pDraw )
 
 	if ( bEnabled && ( bPressed || bChecked || bHot ) )
 	{
-		const COLORREF fill = ( bPressed || ( bChecked && bHot ) ) ? g_ColorHilight : g_ColorMenuHot;
 		const RECT &rect = pDraw->nmcd.rc;
-		HDC hDC = pDraw->nmcd.hdc;
+		HDC hDC          = pDraw->nmcd.hdc;
+		COLORREF fill    = g_ColorMenuHot;
+		COLORREF edge    = fill;
+
+		if ( bPressed || ( bChecked && bHot ) )
+		{
+			fill = g_ColorHilight;
+			edge = fill;
+		}
+
+		if ( bChecked )
+		{
+			edge = g_ColorBorder;
+		}
 
 		const int nSaved = SaveDC( hDC );
 		SelectObject( hDC, GetStockObject( DC_BRUSH ) );
 		SelectObject( hDC, GetStockObject( DC_PEN ) );
 		SetDCBrushColor( hDC, fill );
-		SetDCPenColor( hDC, bChecked ? g_ColorBorder : fill );
+		SetDCPenColor( hDC, edge );
 		RoundRect( hDC, rect.left, rect.top, rect.right, rect.bottom, s_nToolbarRound, s_nToolbarRound );
+
 		RestoreDC( hDC, nSaved );
 	}
 
-	pDraw->clrText = bEnabled ? g_ColorText : g_ColorGrayText;
+	pDraw->clrText = TextColor( bEnabled );
 
 	return TBCDRF_NOEDGES | TBCDRF_NOOFFSET | TBCDRF_NOBACKGROUND | TBCDRF_NOMARK | TBCDRF_NOETCHEDEFFECT;
 }

@@ -112,6 +112,17 @@ static bool HasOwnIcon( HMODULE hModule, ULONG_PTR nName )
 	return IsHammer( hModule ) && IS_INTRESOURCE( nName ) && FindSelfResource( nName, s_nIconType );
 }
 
+// This DLL for its own resources, the caller's module otherwise
+static HMODULE ResourceModule( bool bOwn, HMODULE hModule )
+{
+	if ( bOwn )
+	{
+		return s_hSelf;
+	}
+
+	return hModule;
+}
+
 // Module LoadImage takes the image from: ours when we have it
 static HINSTANCE ImageModule( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags )
 {
@@ -121,7 +132,8 @@ static HINSTANCE ImageModule( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, 
 	}
 
 	const bool bOwn = ( nType == IMAGE_BITMAP && FindOwnBitmap( hInstance, nName, s_nBitmapType ) ) || ( nType == IMAGE_ICON && HasOwnIcon( hInstance, nName ) );
-	return bOwn ? s_hSelf : hInstance;
+
+	return ResourceModule( bOwn, hInstance );
 }
 
 //-----------------------------------------------------------------------------
@@ -153,6 +165,7 @@ static void FillWith( HDC hDC, const RECT &rect, COLORREF color )
 {
 	HBRUSH hBrush = CreateSolidBrush( color );
 	FillRect( hDC, &rect, hBrush );
+
 	DeleteObject( hBrush );
 }
 
@@ -193,6 +206,7 @@ static void KeepGlyphsOpaque( DWORD *pPixels, int nWidth, const SIZE &glyph )
 static HBITMAP CreateCheckStrip()
 {
 	HTHEME hTheme = OpenThemeData( nullptr, L"DarkMode_Explorer::Button" );
+
 	if ( !hTheme )
 	{
 		return nullptr;
@@ -208,9 +222,10 @@ static HBITMAP CreateCheckStrip()
 	info.bmiHeader.biBitCount    = 32;
 	info.bmiHeader.biCompression = BI_RGB;
 
-	DWORD *pPixels = nullptr;
-	HDC hDC = CreateCompatibleDC( nullptr );
+	DWORD *pPixels  = nullptr;
+	HDC hDC         = CreateCompatibleDC( nullptr );
 	HBITMAP hBitmap = CreateDIBSection( hDC, &info, DIB_RGB_COLORS, reinterpret_cast<void **>( &pPixels ), nullptr, 0 );
+
 	if ( hBitmap )
 	{
 		HGDIOBJ hOld = SelectObject( hDC, hBitmap );
@@ -234,7 +249,13 @@ static HBITMAP CreateCheckStrip()
 static HANDLE LoadCheckStrip( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags )
 {
 	const bool bStrip = IsHammer( hInstance ) && nType == IMAGE_BITMAP && !( nFlags & LR_LOADFROMFILE ) && nName == s_nCheckStrip;
-	return bStrip ? CreateCheckStrip() : nullptr;
+
+	if ( !bStrip )
+	{
+		return nullptr;
+	}
+
+	return CreateCheckStrip();
 }
 
 //-----------------------------------------------------------------------------
@@ -244,61 +265,96 @@ static HANDLE LoadCheckStrip( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, 
 static HRSRC WINAPI HookFindResourceA( HMODULE hModule, LPCSTR pszName, LPCSTR pszType )
 {
 	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pszName ), reinterpret_cast<ULONG_PTR>( pszType ) );
-	return hResource ? hResource : reinterpret_cast<FindResourceA_t>( s_pFindResourceA )( hModule, pszName, pszType );
+
+	if ( hResource )
+	{
+		return hResource;
+	}
+
+	return reinterpret_cast<FindResourceA_t>( s_pFindResourceA )( hModule, pszName, pszType );
 }
 
 static HRSRC WINAPI HookFindResourceW( HMODULE hModule, LPCWSTR pwszName, LPCWSTR pwszType )
 {
 	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pwszName ), reinterpret_cast<ULONG_PTR>( pwszType ) );
-	return hResource ? hResource : reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( hModule, pwszName, pwszType );
+
+	if ( hResource )
+	{
+		return hResource;
+	}
+
+	return reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( hModule, pwszName, pwszType );
 }
 
 static HRSRC WINAPI HookFindResourceExW( HMODULE hModule, LPCWSTR pwszType, LPCWSTR pwszName, WORD nLanguage )
 {
 	HRSRC hResource = FindOwnBitmap( hModule, reinterpret_cast<ULONG_PTR>( pwszName ), reinterpret_cast<ULONG_PTR>( pwszType ) );
-	return hResource ? hResource : reinterpret_cast<FindResourceExW_t>( s_pFindResourceExW )( hModule, pwszType, pwszName, nLanguage );
+
+	if ( hResource )
+	{
+		return hResource;
+	}
+
+	return reinterpret_cast<FindResourceExW_t>( s_pFindResourceExW )( hModule, pwszType, pwszName, nLanguage );
 }
 
 static HGLOBAL WINAPI HookLoadResource( HMODULE hModule, HRSRC hResource )
 {
-	return reinterpret_cast<LoadResource_t>( s_pLoadResource )( IsOwnResource( hResource ) ? s_hSelf : hModule, hResource );
+	return reinterpret_cast<LoadResource_t>( s_pLoadResource )( ResourceModule( IsOwnResource( hResource ), hModule ), hResource );
 }
 
 static DWORD WINAPI HookSizeofResource( HMODULE hModule, HRSRC hResource )
 {
-	return reinterpret_cast<SizeofResource_t>( s_pSizeofResource )( IsOwnResource( hResource ) ? s_hSelf : hModule, hResource );
+	return reinterpret_cast<SizeofResource_t>( s_pSizeofResource )( ResourceModule( IsOwnResource( hResource ), hModule ), hResource );
 }
 
 static HBITMAP WINAPI HookLoadBitmapW( HINSTANCE hInstance, LPCWSTR pwszName )
 {
 	const bool bOwn = FindOwnBitmap( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), s_nBitmapType ) != nullptr;
-	return reinterpret_cast<LoadBitmapW_t>( s_pLoadBitmapW )( bOwn ? s_hSelf : hInstance, pwszName );
+
+	return reinterpret_cast<LoadBitmapW_t>( s_pLoadBitmapW )( ResourceModule( bOwn, hInstance ), pwszName );
 }
 
 static HANDLE WINAPI HookLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
 	const ULONG_PTR nName = reinterpret_cast<ULONG_PTR>( pszName );
+
 	HANDLE hStrip = LoadCheckStrip( hInstance, nName, nType, nFlags );
-	return hStrip ? hStrip : reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( ImageModule( hInstance, nName, nType, nFlags ), pszName, nType, nWidth, nHeight, nFlags );
+
+	if ( hStrip )
+	{
+		return hStrip;
+	}
+
+	return reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( ImageModule( hInstance, nName, nType, nFlags ), pszName, nType, nWidth, nHeight, nFlags );
 }
 
 static HANDLE WINAPI HookLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
 	const ULONG_PTR nName = reinterpret_cast<ULONG_PTR>( pwszName );
+
 	HANDLE hStrip = LoadCheckStrip( hInstance, nName, nType, nFlags );
-	return hStrip ? hStrip : reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( ImageModule( hInstance, nName, nType, nFlags ), pwszName, nType, nWidth, nHeight, nFlags );
+
+	if ( hStrip )
+	{
+		return hStrip;
+	}
+
+	return reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( ImageModule( hInstance, nName, nType, nFlags ), pwszName, nType, nWidth, nHeight, nFlags );
 }
 
 static HICON WINAPI HookLoadIconA( HINSTANCE hInstance, LPCSTR pszName )
 {
 	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pszName ) );
-	return reinterpret_cast<LoadIconA_t>( s_pLoadIconA )( bOwn ? s_hSelf : hInstance, pszName );
+
+	return reinterpret_cast<LoadIconA_t>( s_pLoadIconA )( ResourceModule( bOwn, hInstance ), pszName );
 }
 
 static HICON WINAPI HookLoadIconW( HINSTANCE hInstance, LPCWSTR pwszName )
 {
 	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ) );
-	return reinterpret_cast<LoadIconW_t>( s_pLoadIconW )( bOwn ? s_hSelf : hInstance, pwszName );
+
+	return reinterpret_cast<LoadIconW_t>( s_pLoadIconW )( ResourceModule( bOwn, hInstance ), pwszName );
 }
 
 //-----------------------------------------------------------------------------
@@ -308,13 +364,25 @@ static HICON WINAPI HookLoadIconW( HINSTANCE hInstance, LPCWSTR pwszName )
 static HANDLE WINAPI HookComctlLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
 	HANDLE hStrip = LoadCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), nType, nFlags );
-	return hStrip ? hStrip : reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( hInstance, pszName, nType, nWidth, nHeight, nFlags );
+
+	if ( hStrip )
+	{
+		return hStrip;
+	}
+
+	return reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( hInstance, pszName, nType, nWidth, nHeight, nFlags );
 }
 
 static HANDLE WINAPI HookComctlLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
 	HANDLE hStrip = LoadCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), nType, nFlags );
-	return hStrip ? hStrip : reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( hInstance, pwszName, nType, nWidth, nHeight, nFlags );
+
+	if ( hStrip )
+	{
+		return hStrip;
+	}
+
+	return reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( hInstance, pwszName, nType, nWidth, nHeight, nFlags );
 }
 
 //-----------------------------------------------------------------------------

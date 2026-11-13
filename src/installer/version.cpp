@@ -71,7 +71,12 @@ int CompareVersions( const Version_t &a, const Version_t &b )
 	{
 		if ( nA[ i ] != nB[ i ] )
 		{
-			return nA[i] < nB[i] ? -1 : 1;
+			if ( nA[ i ] < nB[ i ] )
+			{
+				return -1;
+			}
+
+			return 1;
 		}
 	}
 

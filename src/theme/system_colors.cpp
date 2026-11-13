@@ -278,19 +278,37 @@ HBRUSH ClassDarkBrush( HWND hWnd )
 static DWORD WINAPI HookGetSysColor( int nIndex )
 {
 	COLORREF color = 0;
-	return DarkColor( nIndex, color ) ? color : reinterpret_cast<GetSysColor_t>( s_pGetSysColor )( nIndex );
+
+	if ( DarkColor( nIndex, color ) )
+	{
+		return color;
+	}
+
+	return reinterpret_cast<GetSysColor_t>( s_pGetSysColor )( nIndex );
 }
 
 static HBRUSH WINAPI HookGetSysColorBrush( int nIndex )
 {
 	HBRUSH hBrush = DarkBrush( nIndex );
-	return hBrush ? hBrush : SystemBrush( nIndex );
+
+	if ( hBrush )
+	{
+		return hBrush;
+	}
+
+	return SystemBrush( nIndex );
 }
 
 static COLORREF WINAPI HookGetThemeSysColor( HTHEME hTheme, int nIndex )
 {
 	COLORREF color = 0;
-	return DarkColor( nIndex, color ) ? color : reinterpret_cast<GetThemeSysColor_t>( s_pGetThemeSysColor )( hTheme, nIndex );
+
+	if ( DarkColor( nIndex, color ) )
+	{
+		return color;
+	}
+
+	return reinterpret_cast<GetThemeSysColor_t>( s_pGetThemeSysColor )( hTheme, nIndex );
 }
 
 bool SystemColors_Init()
@@ -300,7 +318,12 @@ bool SystemColors_Init()
 
 	s_pGetSysColor      = GetProcAddress( hUser32, "GetSysColor" );
 	s_pGetSysColorBrush = GetProcAddress( hUser32, "GetSysColorBrush" );
-	s_pGetThemeSysColor = hUxTheme ? GetProcAddress( hUxTheme, "GetThemeSysColor" ) : nullptr;
+	s_pGetThemeSysColor = nullptr;
+
+	if ( hUxTheme )
+	{
+		s_pGetThemeSysColor = GetProcAddress( hUxTheme, "GetThemeSysColor" );
+	}
 
 	return s_pGetSysColor && s_pGetSysColorBrush;
 }
