@@ -47,6 +47,7 @@ BOOL WINAPI DllMain( HINSTANCE hInstance, DWORD nReason, LPVOID )
 	HMODULE hKernel32 = GetModuleHandleW( L"kernel32.dll" );
 	s_pLoadLibraryExA = GetProcAddress( hKernel32, "LoadLibraryExA" );
 	s_pLoadLibraryExW = GetProcAddress( hKernel32, "LoadLibraryExW" );
+
 	if ( !s_pLoadLibraryExA || !s_pLoadLibraryExW )
 	{
 		return TRUE;

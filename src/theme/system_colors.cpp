@@ -93,9 +93,9 @@ static const DarkColor_t s_Palette[] =
 	{ COLOR_MENUBAR,             &g_ColorMenu },
 };
 
-static HBRUSH s_hBrushes[COLOR_MENUBAR + 1];
-static HBRUSH s_hBorderBrush = nullptr;
-static HBRUSH s_hEditBrush = nullptr;
+static HBRUSH s_hBrushes[ COLOR_MENUBAR + 1 ];
+static HBRUSH s_hBorderBrush  = nullptr;
+static HBRUSH s_hEditBrush    = nullptr;
 static HBRUSH s_hMenuHotBrush = nullptr;
 
 using GetSysColor_t      = DWORD ( WINAPI * )( int );
@@ -120,21 +120,24 @@ static bool ParseColor( const wchar_t *pwszValue, COLORREF &color )
 
 	if ( *pwszValue == L'#' )
 	{
-		const wchar_t *pwszDigits = pwszValue + 1;
-		wchar_t *pwszEnd = nullptr;
+		const wchar_t *pwszDigits  = pwszValue + 1;
+		wchar_t *pwszEnd           = nullptr;
 		const unsigned long nValue = wcstoul( pwszDigits, &pwszEnd, 16 );
+
 		if ( pwszEnd - pwszDigits != 6 )
 		{
 			return false;
 		}
 
 		color = RGB( ( nValue >> 16 ) & 0xFF, ( nValue >> 8 ) & 0xFF, nValue & 0xFF );
+
 		return true;
 	}
 
-	int nRed = -1;
+	int nRed   = -1;
 	int nGreen = -1;
-	int nBlue = -1;
+	int nBlue  = -1;
+
 	if ( swscanf_s( pwszValue, L"%d , %d , %d", &nRed, &nGreen, &nBlue ) != 3 )
 	{
 		return false;
@@ -146,6 +149,7 @@ static bool ParseColor( const wchar_t *pwszValue, COLORREF &color )
 	}
 
 	color = RGB( nRed, nGreen, nBlue );
+
 	return true;
 }
 
@@ -153,9 +157,10 @@ void LoadPalette( const std::wstring &ini )
 {
 	for ( const PaletteKey_t &key : s_PaletteKeys )
 	{
-		wchar_t wszValue[64] = {};
+		wchar_t wszValue[ 64 ] = {};
 		GetPrivateProfileStringW( L"Palette", key.m_pwszName, L"", wszValue, ARRAYSIZE( wszValue ), ini.c_str() );
-		if ( wszValue[0] && !ParseColor( wszValue, *key.m_pColor ) )
+
+		if ( wszValue[ 0 ] && !ParseColor( wszValue, *key.m_pColor ) )
 		{
 			Log( "palette: %ls=%ls is not #RRGGBB or R,G,B, default kept", key.m_pwszName, wszValue );
 		}
@@ -169,6 +174,7 @@ static bool DarkColor( int nIndex, COLORREF &color )
 		if ( entry.m_nIndex == nIndex )
 		{
 			color = *entry.m_pColor;
+
 			return true;
 		}
 	}
@@ -193,12 +199,13 @@ static HBRUSH CachedBrush( HBRUSH &hBrush, COLORREF color )
 HBRUSH DarkBrush( int nIndex )
 {
 	COLORREF color = 0;
+
 	if ( nIndex < 0 || nIndex > COLOR_MENUBAR || !DarkColor( nIndex, color ) )
 	{
 		return nullptr;
 	}
 
-	return CachedBrush( s_hBrushes[nIndex], color );
+	return CachedBrush( s_hBrushes[ nIndex ], color );
 }
 
 HBRUSH BorderBrush()
@@ -242,6 +249,7 @@ bool IsSystemBrush( HBRUSH hBrush )
 HBRUSH ClassDarkBrush( HWND hWnd )
 {
 	const ULONG_PTR nBrush = GetClassLongPtrW( hWnd, GCLP_HBRBACKGROUND );
+
 	if ( !nBrush )
 	{
 		return nullptr;
@@ -299,9 +307,9 @@ bool SystemColors_Init()
 
 int SystemColors_AddHooks( ImportHook_t *pHooks )
 {
-	pHooks[0] = { s_pGetSysColor,      reinterpret_cast<void *>( &HookGetSysColor ) };
-	pHooks[1] = { s_pGetSysColorBrush, reinterpret_cast<void *>( &HookGetSysColorBrush ) };
-	pHooks[2] = { s_pGetThemeSysColor, reinterpret_cast<void *>( &HookGetThemeSysColor ) };
+	pHooks[ 0 ] = { s_pGetSysColor,      reinterpret_cast<void *>( &HookGetSysColor ) };
+	pHooks[ 1 ] = { s_pGetSysColorBrush, reinterpret_cast<void *>( &HookGetSysColorBrush ) };
+	pHooks[ 2 ] = { s_pGetThemeSysColor, reinterpret_cast<void *>( &HookGetThemeSysColor ) };
 
 	return 3;
 }

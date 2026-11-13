@@ -51,6 +51,7 @@ static bool IsForwarded( const std::string &function )
 static std::string FindUnforwardedFunctions( const Import_t &import )
 {
 	std::string unforwarded;
+
 	for ( const std::string &function : import.m_Functions )
 	{
 		if ( !IsForwarded( function ) )
@@ -87,6 +88,7 @@ static bool WriteProxy( bool b64, const fs::path &path )
 static void RestoreLegacyExe( const HammerPaths_t &paths, std::wstring &output )
 {
 	const fs::path backup = BackupOf( paths.m_Exe );
+
 	if ( !IsFile( backup ) )
 	{
 		return;
@@ -95,16 +97,19 @@ static void RestoreLegacyExe( const HammerPaths_t &paths, std::wstring &output )
 	if ( !CopyOver( backup, paths.m_Exe ) )
 	{
 		output += L"Failed to restore hammerplusplus.exe patched by an earlier version\n";
+
 		return;
 	}
 
 	RemoveFile( backup );
+
 	for ( const wchar_t *pwszName : s_pwszLegacyNames )
 	{
 		RemoveFile( paths.m_HammerDir / pwszName );
 	}
 
 	const fs::path legacyIni = paths.m_HammerDir / L"hppxdark.ini";
+
 	if ( IsFile( legacyIni ) && !IsFile( paths.m_Ini ) )
 	{
 		std::error_code error;
@@ -119,13 +124,16 @@ static bool LoadModuleImage( const HammerPaths_t &paths, Bytes_t &bytes, Image_t
 	if ( !ReadFileBytes( paths.m_Module, bytes ) )
 	{
 		output += L"Failed to read hammerplusplus_dll.dll\n";
+
 		return false;
 	}
 
 	std::string error;
+
 	if ( !ReadImage( bytes, image, error ) )
 	{
 		output += L"hammerplusplus_dll.dll: " + Widen( error ) + L"\n";
+
 		return false;
 	}
 
@@ -145,16 +153,20 @@ static bool UpdateProxy( const HammerPaths_t &paths, bool b64, std::wstring &out
 static const Import_t *FindPatchTarget( const Image_t &image, std::wstring &output )
 {
 	const Import_t *pTarget = FindImport( image, s_pszOldName );
+
 	if ( !pTarget )
 	{
 		output += Widen( s_pszOldName ) + L" import is not found, this Hammer++ build is not supported\n";
+
 		return nullptr;
 	}
 
 	const std::string unforwarded = FindUnforwardedFunctions( *pTarget );
+
 	if ( !unforwarded.empty() )
 	{
 		output += L"This Hammer++ build imports functions hppxdark.dll does not forward: " + Widen( unforwarded ) + L"\n";
+
 		return nullptr;
 	}
 
@@ -167,6 +179,7 @@ static bool WritePatchedModule( const HammerPaths_t &paths, const Bytes_t &bytes
 	if ( !CopyOver( paths.m_Module, paths.m_Backup ) )
 	{
 		output += L"Failed to save hammerplusplus_dll.dll.orig\n";
+
 		return false;
 	}
 
@@ -176,6 +189,7 @@ static bool WritePatchedModule( const HammerPaths_t &paths, const Bytes_t &bytes
 		RemoveFile( paths.m_Backup );
 		RemoveFile( paths.m_Proxy );
 		output += L"Failed to write hammerplusplus_dll.dll, is Hammer++ running?\n";
+
 		return false;
 	}
 
@@ -192,6 +206,7 @@ PatchResult_t PatchHammer( const fs::path &hammerDir )
 
 	Bytes_t bytes;
 	Image_t image;
+	
 	if ( !LoadModuleImage( paths, bytes, image, result.m_Output ) )
 	{
 		return result;
@@ -200,10 +215,12 @@ PatchResult_t PatchHammer( const fs::path &hammerDir )
 	if ( FindImport( image, s_pszNewName ) )
 	{
 		result.m_bSuccess = UpdateProxy( paths, image.m_b64, result.m_Output );
+
 		return result;
 	}
 
 	const Import_t *pTarget = FindPatchTarget( image, result.m_Output );
+
 	if ( !pTarget )
 	{
 		return result;
@@ -225,12 +242,14 @@ PatchResult_t RestoreHammer( const fs::path &hammerDir )
 	if ( !IsFile( paths.m_Backup ) )
 	{
 		result.m_Output += L"No backup to restore: hammerplusplus_dll.dll.orig\n";
+
 		return result;
 	}
 
 	if ( !CopyOver( paths.m_Backup, paths.m_Module ) )
 	{
 		result.m_Output += L"Failed to restore hammerplusplus_dll.dll, is Hammer++ running?\n";
+
 		return result;
 	}
 

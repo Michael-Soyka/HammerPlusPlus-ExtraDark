@@ -15,18 +15,21 @@
 std::wstring ModuleFilePath( const wchar_t *pwszName )
 {
 	HMODULE hSelf = nullptr;
+
 	GetModuleHandleExW(
 		GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 		reinterpret_cast<LPCWSTR>( &ModuleFilePath ),
 		&hSelf
 	);
 
-	wchar_t wszPath[MAX_PATH] = {};
+	wchar_t wszPath[ MAX_PATH ] = {};
+	
 	GetModuleFileNameW( hSelf, wszPath, MAX_PATH );
 
 	std::wstring path = wszPath;
 	path.resize( path.find_last_of( L'\\' ) + 1 );
 	path += pwszName;
+
 	return path;
 }
 
@@ -35,6 +38,7 @@ std::wstring ModuleFilePath( const wchar_t *pwszName )
 	{
 		static FILE *s_pFile  = nullptr;
 		static bool s_bOpened = false;
+
 		if ( s_bOpened )
 		{
 			return s_pFile;
@@ -44,12 +48,14 @@ std::wstring ModuleFilePath( const wchar_t *pwszName )
 
 		// Shared, so the log can be read while Hammer++ runs
 		s_pFile = _wfsopen( ModuleFilePath( L"hppxdark.log" ).c_str(), L"w", _SH_DENYNO );
+
 		return s_pFile;
 	}
 
 	void Log( const char *pszFormat, ... )
 	{
 		FILE *pFile = OpenLog();
+
 		if ( !pFile )
 		{
 			return;
@@ -61,6 +67,7 @@ std::wstring ModuleFilePath( const wchar_t *pwszName )
 		va_end( args );
 
 		fputc( '\n', pFile );
+
 		fflush( pFile );
 	}
 #endif

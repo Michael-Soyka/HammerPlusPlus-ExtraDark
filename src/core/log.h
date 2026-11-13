@@ -17,5 +17,6 @@ std::wstring ModuleFilePath( const wchar_t *pwszName );
 	// Compiled out: no HPPXDARK_LOG in CMake
 	inline void Log( const char *, ... )
 	{
+		
 	}
 #endif

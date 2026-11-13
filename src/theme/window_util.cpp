@@ -10,7 +10,8 @@
 
 std::wstring ClassName( HWND hWnd )
 {
-	wchar_t wszClass[64];
+	wchar_t wszClass[ 64 ];
+
 	if ( !GetClassNameW( hWnd, wszClass, ARRAYSIZE( wszClass ) ) )
 	{
 		return {};

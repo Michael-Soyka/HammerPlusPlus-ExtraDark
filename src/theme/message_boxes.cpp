@@ -39,39 +39,44 @@ struct MessageBoxScope_t
 static int WINAPI HookMessageBoxA( HWND hWnd, LPCSTR pszText, LPCSTR pszCaption, UINT nType )
 {
 	const MessageBoxScope_t scope;
+
 	return reinterpret_cast<MessageBoxA_t>( s_pMessageBoxA )( hWnd, pszText, pszCaption, nType );
 }
 
 static int WINAPI HookMessageBoxW( HWND hWnd, LPCWSTR pwszText, LPCWSTR pwszCaption, UINT nType )
 {
 	const MessageBoxScope_t scope;
+
 	return reinterpret_cast<MessageBoxW_t>( s_pMessageBoxW )( hWnd, pwszText, pwszCaption, nType );
 }
 
 static int WINAPI HookMessageBoxIndirectA( const MSGBOXPARAMSA *pParams )
 {
 	const MessageBoxScope_t scope;
+
 	return reinterpret_cast<MessageBoxIndirectA_t>( s_pMessageBoxIndirectA )( pParams );
 }
 
 static int WINAPI HookMessageBoxIndirectW( const MSGBOXPARAMSW *pParams )
 {
 	const MessageBoxScope_t scope;
+
 	return reinterpret_cast<MessageBoxIndirectW_t>( s_pMessageBoxIndirectW )( pParams );
 }
 
 int MessageBoxes_AddHooks( ImportHook_t *pHooks )
 {
 	HMODULE hUser32 = GetModuleHandleW( L"user32.dll" );
+
 	s_pMessageBoxA         = GetProcAddress( hUser32, "MessageBoxA" );
 	s_pMessageBoxW         = GetProcAddress( hUser32, "MessageBoxW" );
 	s_pMessageBoxIndirectA = GetProcAddress( hUser32, "MessageBoxIndirectA" );
 	s_pMessageBoxIndirectW = GetProcAddress( hUser32, "MessageBoxIndirectW" );
 
-	pHooks[0] = { s_pMessageBoxA,         reinterpret_cast<void *>( &HookMessageBoxA ) };
-	pHooks[1] = { s_pMessageBoxW,         reinterpret_cast<void *>( &HookMessageBoxW ) };
-	pHooks[2] = { s_pMessageBoxIndirectA, reinterpret_cast<void *>( &HookMessageBoxIndirectA ) };
-	pHooks[3] = { s_pMessageBoxIndirectW, reinterpret_cast<void *>( &HookMessageBoxIndirectW ) };
+	pHooks[ 0 ] = { s_pMessageBoxA,         reinterpret_cast<void *>( &HookMessageBoxA ) };
+	pHooks[ 1 ] = { s_pMessageBoxW,         reinterpret_cast<void *>( &HookMessageBoxW ) };
+	pHooks[ 2 ] = { s_pMessageBoxIndirectA, reinterpret_cast<void *>( &HookMessageBoxIndirectA ) };
+	pHooks[ 3 ] = { s_pMessageBoxIndirectW, reinterpret_cast<void *>( &HookMessageBoxIndirectW ) };
 
 	return 4;
 }
