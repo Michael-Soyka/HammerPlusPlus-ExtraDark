@@ -160,7 +160,18 @@ static std::wstring DescribeVersion( const HammerDir_t &hammer )
 	}
 
 	const int nOrder = CompareVersions( hammer.m_Installed, InstallerVersion() );
-	const wchar_t *pwszVerdict = nOrder < 0 ? L"outdated" : ( nOrder > 0 ? L"newer than this installer" : L"up to date" );
+
+	const wchar_t *pwszVerdict = L"up to date";
+
+	if ( nOrder < 0 )
+	{
+		pwszVerdict = L"outdated";
+	}
+	else if ( nOrder > 0 )
+	{
+		pwszVerdict = L"newer than this installer";
+	}
+
 	return L"Installed: " + FormatVersion( hammer.m_Installed ) + L"  \u00b7  Installer: " + installer + L"  \u2014  " + pwszVerdict;
 }
 
@@ -198,7 +209,14 @@ static void UpdateButtons( const HammerDir_t &hammer )
 {
 	const bool bPatched = hammer.m_nState == HAMMER_STATE_PATCHED;
 
-	SetWindowTextW( s_App.m_hRepatch, IsOutdated( hammer ) ? L"Update" : L"Repatch" );
+	const wchar_t *pwszRepatch = L"Repatch";
+
+	if ( IsOutdated( hammer ) )
+	{
+		pwszRepatch = L"Update";
+	}
+
+	SetWindowTextW( s_App.m_hRepatch, pwszRepatch );
 	EnableWindow( s_App.m_hPatch, hammer.m_nState == HAMMER_STATE_READY );
 
 	// Patch and Launch share a place: hide first, then show
@@ -209,9 +227,16 @@ static void UpdateButtons( const HammerDir_t &hammer )
 		ShowWindow( s_App.m_hPatch, SW_HIDE );
 	}
 
+	int nShowRow = SW_HIDE;
+
+	if ( bPatched )
+	{
+		nShowRow = SW_SHOW;
+	}
+
 	for ( HWND hButton : hPatchedRow )
 	{
-		ShowWindow( hButton, bPatched ? SW_SHOW : SW_HIDE );
+		ShowWindow( hButton, nShowRow );
 	}
 
 	if ( !bPatched )
@@ -223,8 +248,8 @@ static void UpdateButtons( const HammerDir_t &hammer )
 static void Refresh()
 {
 	s_App.m_Hammer = FindHammerDir( GetText( s_App.m_hPath ) );
-	const HammerDir_t &hammer = s_App.m_Hammer;
 
+	const HammerDir_t &hammer = s_App.m_Hammer;
 	const StatusLine_t status = DescribeStatus( hammer );
 
 	s_App.m_nStatusColor = status.m_nColor;
@@ -249,8 +274,15 @@ static void SetResult( const std::wstring &text, COLORREF nColor )
 
 static void ShowResult( const PatchResult_t &result )
 {
+	COLORREF nColor = s_nBad;
+
+	if ( result.m_bSuccess )
+	{
+		nColor = s_nGood;
+	}
+
 	Refresh();
-	SetResult( result.m_Output, result.m_bSuccess ? s_nGood : s_nBad );
+	SetResult( result.m_Output, nColor );
 }
 
 //-----------------------------------------------------------------------------
@@ -302,7 +334,15 @@ static void OnLaunch()
 	const HINSTANCE hResult = ShellExecuteW( s_App.m_hWnd, L"open", exe.c_str(), nullptr, hammer.m_Dir.c_str(), SW_SHOWNORMAL );
 
 	const bool bStarted = reinterpret_cast<INT_PTR>( hResult ) > s_nShellExecuteOk;
-	SetResult( bStarted ? L"Hammer++ started" : L"Failed to start hammerplusplus.exe", bStarted ? s_nGood : s_nBad );
+
+	if ( bStarted )
+	{
+		SetResult( L"Hammer++ started", s_nGood );
+
+		return;
+	}
+
+	SetResult( L"Failed to start hammerplusplus.exe", s_nBad );
 }
 
 static void OnBrowse()
@@ -403,10 +443,10 @@ static void OnCommand( int nId, int nCode )
 
 static void FillRound( HDC hDC, const RECT &rect, COLORREF nFill, COLORREF nEdge )
 {
-	HBRUSH hBrush = CreateSolidBrush( nFill );
-	HPEN hPen = CreatePen( PS_SOLID, 1, nEdge );
+	HBRUSH hBrush     = CreateSolidBrush( nFill );
+	HPEN hPen         = CreatePen( PS_SOLID, 1, nEdge );
 	HGDIOBJ hOldBrush = SelectObject( hDC, hBrush );
-	HGDIOBJ hOldPen = SelectObject( hDC, hPen );
+	HGDIOBJ hOldPen   = SelectObject( hDC, hPen );
 
 	RoundRect( hDC, rect.left, rect.top, rect.right, rect.bottom, Scale( 6 ), Scale( 6 ) );
 
@@ -425,12 +465,24 @@ static COLORREF ButtonFillColor( const DRAWITEMSTRUCT &item )
 		return s_nButton;
 	}
 
-	if ( item.itemState & ODS_SELECTED )
+	const bool bSelected = ( item.itemState & ODS_SELECTED ) != 0;
+
+	if ( bAccent && bSelected )
 	{
-		return bAccent ? s_nAccentPressed : s_nPressed;
+		return s_nAccentPressed;
 	}
 
-	return bAccent ? s_nAccent : s_nButton;
+	if ( bSelected )
+	{
+		return s_nPressed;
+	}
+
+	if ( bAccent )
+	{
+		return s_nAccent;
+	}
+
+	return s_nButton;
 }
 
 static void DrawButtonText( const DRAWITEMSTRUCT &item, bool bDisabled )
@@ -438,10 +490,18 @@ static void DrawButtonText( const DRAWITEMSTRUCT &item, bool bDisabled )
 	wchar_t wszText[ 64 ];
 	GetWindowTextW( item.hwndItem, wszText, ARRAYSIZE( wszText ) );
 
-	RECT text = item.rcItem;
+	RECT text       = item.rcItem;
+	COLORREF nColor = s_nButtonText;
+
+	if ( bDisabled )
+	{
+		nColor = s_nDim;
+	}
+
 	SetBkMode( item.hDC, TRANSPARENT );
-	SetTextColor( item.hDC, bDisabled ? s_nDim : s_nButtonText );
+	SetTextColor( item.hDC, nColor );
 	SelectObject( item.hDC, s_App.m_hFont );
+
 	DrawTextW( item.hDC, wszText, -1, &text, DT_CENTER | DT_VCENTER | DT_SINGLELINE );
 }
 
@@ -451,12 +511,14 @@ static void DrawButtonFocus( const DRAWITEMSTRUCT &item )
 	RECT focus = item.rcItem;
 	InflateRect( &focus, -Scale( 2 ), -Scale( 2 ) );
 
-	HPEN hPen = CreatePen( PS_SOLID, 1, s_nText );
-	HGDIOBJ hOldPen = SelectObject( item.hDC, hPen );
+	HPEN hPen         = CreatePen( PS_SOLID, 1, s_nText );
+	HGDIOBJ hOldPen   = SelectObject( item.hDC, hPen );
 	HGDIOBJ hOldBrush = SelectObject( item.hDC, GetStockObject( NULL_BRUSH ) );
+
 	RoundRect( item.hDC, focus.left, focus.top, focus.right, focus.bottom, Scale( 5 ), Scale( 5 ) );
 	SelectObject( item.hDC, hOldBrush );
 	SelectObject( item.hDC, hOldPen );
+
 	DeleteObject( hPen );
 }
 
@@ -464,9 +526,15 @@ static void OnDrawButton( const DRAWITEMSTRUCT &item )
 {
 	const bool bDisabled = ( item.itemState & ODS_DISABLED ) != 0;
 	const COLORREF nFill = ButtonFillColor( item );
+	COLORREF nEdge       = nFill;
+
+	if ( bDisabled )
+	{
+		nEdge = s_nBorder;
+	}
 
 	FillRect( item.hDC, &item.rcItem, s_App.m_hBackground );
-	FillRound( item.hDC, item.rcItem, nFill, bDisabled ? s_nBorder : nFill );
+	FillRound( item.hDC, item.rcItem, nFill, nEdge );
 	DrawButtonText( item, bDisabled );
 
 	if ( item.itemState & ODS_FOCUS )
@@ -478,6 +546,7 @@ static void OnDrawButton( const DRAWITEMSTRUCT &item )
 static void OnPaint()
 {
 	PAINTSTRUCT paint;
+	
 	HDC hDC = BeginPaint( s_App.m_hWnd, &paint );
 
 	FillRound( hDC, ScaleBox( s_PathFrame ), s_nField, s_nBorder );
@@ -536,9 +605,15 @@ static HICON LoadAppIcon( HINSTANCE hInstance, int nWidthMetric, int nHeightMetr
 static void AddControl( const ControlSpec_t &spec )
 {
 	const Box_t &box = spec.m_Box;
-	HWND hControl = CreateWindowExW( 0, spec.m_pwszClass, spec.m_pwszText, WS_CHILD | WS_VISIBLE | spec.m_nStyle, Scale( box.m_nX ), Scale( box.m_nY ), Scale( box.m_nWidth ), Scale( box.m_nHeight ), s_App.m_hWnd, reinterpret_cast<HMENU>( static_cast<INT_PTR>( spec.m_nId ) ), nullptr, nullptr );
+	HWND hControl    = CreateWindowExW( 0, spec.m_pwszClass, spec.m_pwszText, WS_CHILD | WS_VISIBLE | spec.m_nStyle, Scale( box.m_nX ), Scale( box.m_nY ), Scale( box.m_nWidth ), Scale( box.m_nHeight ), s_App.m_hWnd, reinterpret_cast<HMENU>( static_cast<INT_PTR>( spec.m_nId ) ), nullptr, nullptr );
 
-	HFONT hFont = spec.m_bTitleFont ? s_App.m_hTitleFont : s_App.m_hFont;
+	HFONT hFont = s_App.m_hFont;
+
+	if ( spec.m_bTitleFont )
+	{
+		hFont = s_App.m_hTitleFont;
+	}
+
 	SendMessageW( hControl, WM_SETFONT, reinterpret_cast<WPARAM>( hFont ), FALSE );
 
 	if ( spec.m_phControl )

@@ -42,7 +42,18 @@ static bool s_bDocumentSeen = false;
 static int HookModule( HMODULE hModule, bool bHammer )
 {
 	const int nReplaced = HookImports( hModule, s_Hooks, s_nHooks );
-	const int nIcons = bHammer ? Icons_HookModule( hModule ) : Icons_HookComctl( hModule );
+
+	int nIcons = 0;
+
+	if ( bHammer )
+	{
+		nIcons = Icons_HookModule( hModule );
+	}
+	else
+	{
+		nIcons = Icons_HookComctl( hModule );
+	}
+
 	Log( "hooked %p: %d color imports, %d resource imports", hModule, nReplaced, nIcons );
 
 	return nReplaced;

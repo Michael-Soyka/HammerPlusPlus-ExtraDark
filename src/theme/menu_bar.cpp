@@ -124,9 +124,22 @@ static void DrawTextItem( const UahDrawMenuItem_t &item, const wchar_t *pwszText
 	const bool bHot      = ( nState & ( ODS_HOTLIGHT | ODS_SELECTED ) ) != 0;
 	const bool bDisabled = ( nState & ( ODS_INACTIVE | ODS_DISABLED | ODS_GRAYED ) ) != 0;
 
-	HDC hDC = item.m_Menu.m_hDC;
-	RECT rect = item.m_Draw.rcItem;
-	FillRect( hDC, &rect, bHot ? MenuHotBrush() : DarkBrush( COLOR_MENUBAR ) );
+	HDC hDC         = item.m_Menu.m_hDC;
+	RECT rect       = item.m_Draw.rcItem;
+	HBRUSH hBrush   = DarkBrush( COLOR_MENUBAR );
+	COLORREF nColor = g_ColorText;
+
+	if ( bHot )
+	{
+		hBrush = MenuHotBrush();
+	}
+
+	if ( bDisabled )
+	{
+		nColor = g_ColorGrayText;
+	}
+
+	FillRect( hDC, &rect, hBrush );
 
 	UINT nFlags = DT_CENTER | DT_SINGLELINE | DT_VCENTER;
 
@@ -136,7 +149,7 @@ static void DrawTextItem( const UahDrawMenuItem_t &item, const wchar_t *pwszText
 	}
 
 	SetBkMode( hDC, TRANSPARENT );
-	SetTextColor( hDC, bDisabled ? g_ColorGrayText : g_ColorText );
+	SetTextColor( hDC, nColor );
 	DrawTextW( hDC, pwszText, -1, &rect, nFlags );
 }
 
@@ -210,6 +223,7 @@ void MenuBar_PaintNonClient( HWND hWnd )
 
 	HDC hDC = GetWindowDC( hWnd );
 	PaintBottomLine( hWnd, hDC );
+
 	if ( hMenu )
 	{
 		PaintSystemIcon( hWnd, hMenu, hDC );

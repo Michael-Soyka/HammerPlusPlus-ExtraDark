@@ -38,7 +38,13 @@ static fs::path FindExeDir( const fs::path &base )
 
 		std::error_code error;
 		const fs::path canonical = fs::canonical( candidate, error );
-		return error ? candidate : canonical;
+
+		if ( error )
+		{
+			return candidate;
+		}
+
+		return canonical;
 	}
 
 	return {};

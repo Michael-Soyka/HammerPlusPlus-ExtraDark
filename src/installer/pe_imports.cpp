@@ -197,7 +197,12 @@ static std::string ReadFunctionName( const Bytes_t &bytes, const Sections_t &sec
 
 static std::vector<std::string> ReadImportFunctions( const Bytes_t &bytes, const Sections_t &sections, size_t nThunk, bool b64 )
 {
-	const size_t nThunkSize = b64 ? sizeof( ULONGLONG ) : sizeof( DWORD );
+	size_t nThunkSize = sizeof( DWORD );
+
+	if ( b64 )
+	{
+		nThunkSize = sizeof( ULONGLONG );
+	}
 
 	std::vector<std::string> functions;
 
@@ -219,7 +224,12 @@ static std::vector<std::string> ReadImportFunctions( const Bytes_t &bytes, const
 static bool ReadImport( const Bytes_t &bytes, const Sections_t &sections, const IMAGE_IMPORT_DESCRIPTOR &descriptor, bool b64, Import_t &import )
 {
 	// No lookup table: the address table holds the names until bound
-	const DWORD nLookup = descriptor.OriginalFirstThunk ? descriptor.OriginalFirstThunk : descriptor.FirstThunk;
+	DWORD nLookup = descriptor.OriginalFirstThunk;
+
+	if ( !nLookup )
+	{
+		nLookup = descriptor.FirstThunk;
+	}
 
 	size_t nThunk = 0;
 	const bool bRead = RvaToOffset( sections, descriptor.Name, import.m_nNameOffset ) &&

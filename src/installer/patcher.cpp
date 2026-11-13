@@ -56,7 +56,12 @@ static std::string FindUnforwardedFunctions( const Import_t &import )
 	{
 		if ( !IsForwarded( function ) )
 		{
-			unforwarded += unforwarded.empty() ? function : ", " + function;
+			if ( !unforwarded.empty() )
+			{
+				unforwarded += ", ";
+			}
+
+			unforwarded += function;
 		}
 	}
 
@@ -73,9 +78,29 @@ static void RenameImport( Bytes_t &bytes, const Import_t &import )
 
 static bool WriteProxy( bool b64, const fs::path &path )
 {
-	HRSRC hResource = FindResourceW( nullptr, MAKEINTRESOURCEW( b64 ? IDR_PROXY_X64 : IDR_PROXY_X86 ), RT_RCDATA );
-	HGLOBAL hData = hResource ? LoadResource( nullptr, hResource ) : nullptr;
-	const void *pData = hData ? LockResource( hData ) : nullptr;
+	WORD nResource = IDR_PROXY_X86;
+
+	if ( b64 )
+	{
+		nResource = IDR_PROXY_X64;
+	}
+
+	HRSRC hResource = FindResourceW( nullptr, MAKEINTRESOURCEW( nResource ), RT_RCDATA );
+
+	if ( !hResource )
+	{
+		return false;
+	}
+
+	HGLOBAL hData = LoadResource( nullptr, hResource );
+
+	if ( !hData )
+	{
+		return false;
+	}
+
+	const void *pData = LockResource( hData );
+
 	if ( !pData )
 	{
 		return false;
@@ -144,7 +169,15 @@ static bool LoadModuleImage( const HammerPaths_t &paths, Bytes_t &bytes, Image_t
 static bool UpdateProxy( const HammerPaths_t &paths, bool b64, std::wstring &output )
 {
 	const bool bWritten = WriteProxy( b64, paths.m_Proxy );
-	output += bWritten ? L"hppxdark.dll updated\n" : L"Failed to write hppxdark.dll, is Hammer++ running?\n";
+
+	if ( bWritten )
+	{
+		output += L"hppxdark.dll updated\n";
+	}
+	else
+	{
+		output += L"Failed to write hppxdark.dll, is Hammer++ running?\n";
+	}
 
 	return bWritten;
 }
@@ -193,7 +226,15 @@ static bool WritePatchedModule( const HammerPaths_t &paths, const Bytes_t &bytes
 		return false;
 	}
 
-	output += b64 ? L"Patched (x64)\n" : L"Patched (x86)\n";
+	if ( b64 )
+	{
+		output += L"Patched (x64)\n";
+	}
+	else
+	{
+		output += L"Patched (x86)\n";
+	}
+
 	return true;
 }
 
