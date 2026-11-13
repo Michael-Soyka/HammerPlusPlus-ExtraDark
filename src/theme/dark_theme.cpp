@@ -27,7 +27,7 @@
 static const wchar_t *const s_pwszHammerModule = L"hammerplusplus_dll.dll";
 
 // System color and message box hooks
-static ImportHook_t s_Hooks[7];
+static ImportHook_t s_Hooks[ 7 ];
 static int s_nHooks = 0;
 
 static bool s_bActive = false;
@@ -52,7 +52,7 @@ static bool IsHooked( const HMODULE *phHooked, int nHooked, HMODULE hModule )
 {
 	for ( int i = 0; i < nHooked; i++ )
 	{
-		if ( phHooked[i] == hModule )
+		if ( phHooked[ i ] == hModule )
 		{
 			return true;
 		}
@@ -64,30 +64,34 @@ static bool IsHooked( const HMODULE *phHooked, int nHooked, HMODULE hModule )
 // Loaded modules checked again on the window creation
 static void HookLoadedModules()
 {
-	static HMODULE s_hHooked[16];
+	static HMODULE s_hHooked[ 16 ];
 	static int s_nHooked = 0;
 
-	HMODULE hModules[1024];
+	HMODULE hModules[ 1024 ];
 	DWORD nNeeded = 0;
+
 	if ( !EnumProcessModules( GetCurrentProcess(), hModules, sizeof( hModules ), &nNeeded ) )
 	{
 		return;
 	}
 
 	const int nModules = min( static_cast<int>( nNeeded / sizeof( HMODULE ) ), static_cast<int>( ARRAYSIZE( hModules ) ) );
+
 	for ( int i = 0; i < nModules && s_nHooked < ARRAYSIZE( s_hHooked ); i++ )
 	{
-		wchar_t wszName[MAX_PATH];
-		if ( IsHooked( s_hHooked, s_nHooked, hModules[i] ) || !GetModuleBaseNameW( GetCurrentProcess(), hModules[i], wszName, MAX_PATH ) )
+		wchar_t wszName[ MAX_PATH ];
+
+		if ( IsHooked( s_hHooked, s_nHooked, hModules[ i ] ) || !GetModuleBaseNameW( GetCurrentProcess(), hModules[ i ], wszName, MAX_PATH ) )
 		{
 			continue;
 		}
 
 		const bool bHammer = !_wcsicmp( wszName, s_pwszHammerModule );
+
 		if ( bHammer || !_wcsicmp( wszName, L"comctl32.dll" ) )
 		{
-			HookModule( hModules[i], bHammer );
-			s_hHooked[s_nHooked++] = hModules[i];
+			HookModule( hModules[ i ], bHammer );
+			s_hHooked[ s_nHooked++ ] = hModules[ i ];
 		}
 	}
 }
@@ -127,6 +131,7 @@ static VOID CALLBACK OnDllNotification( ULONG nReason, const LdrDllLoaded_t *pDa
 	}
 
 	const std::wstring name( pData->m_pBaseName->m_pwszBuffer, pData->m_pBaseName->m_nLength / sizeof( wchar_t ) );
+
 	if ( !_wcsicmp( name.c_str(), s_pwszHammerModule ) )
 	{
 		HookModule( static_cast<HMODULE>( pData->m_pBase ), true );
@@ -136,7 +141,9 @@ static VOID CALLBACK OnDllNotification( ULONG nReason, const LdrDllLoaded_t *pDa
 static void RegisterDllNotification()
 {
 	HMODULE hNtdll = GetModuleHandleW( L"ntdll.dll" );
+
 	LdrRegisterDllNotification_t pRegister = reinterpret_cast<LdrRegisterDllNotification_t>( GetProcAddress( hNtdll, "LdrRegisterDllNotification" ) );
+
 	if ( !pRegister )
 	{
 		return;
@@ -162,8 +169,8 @@ using AllowDarkModeForWindow_t = BOOL ( WINAPI * )( HWND, BOOL );
 using FlushMenuThemes_t = void ( WINAPI * )();
 
 static const WORD s_nAllowDarkModeForWindow = 133;
-static const WORD s_nSetPreferredAppMode = 135;
-static const WORD s_nFlushMenuThemes = 136;
+static const WORD s_nSetPreferredAppMode    = 135;
+static const WORD s_nFlushMenuThemes        = 136;
 
 static AllowDarkModeForWindow_t s_pAllowDarkModeForWindow = nullptr;
 
@@ -171,13 +178,15 @@ static AllowDarkModeForWindow_t s_pAllowDarkModeForWindow = nullptr;
 static void InitDarkMode()
 {
 	HMODULE hUxTheme = LoadLibraryExW( L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32 );
+
 	if ( !hUxTheme )
 	{
 		return;
 	}
 
 	SetPreferredAppMode_t pSetPreferredAppMode = reinterpret_cast<SetPreferredAppMode_t>( GetProcAddress( hUxTheme, MAKEINTRESOURCEA( s_nSetPreferredAppMode ) ) );
-	FlushMenuThemes_t pFlushMenuThemes = reinterpret_cast<FlushMenuThemes_t>( GetProcAddress( hUxTheme, MAKEINTRESOURCEA( s_nFlushMenuThemes ) ) );
+	FlushMenuThemes_t pFlushMenuThemes         = reinterpret_cast<FlushMenuThemes_t>( GetProcAddress( hUxTheme, MAKEINTRESOURCEA( s_nFlushMenuThemes ) ) );
+
 	s_pAllowDarkModeForWindow = reinterpret_cast<AllowDarkModeForWindow_t>( GetProcAddress( hUxTheme, MAKEINTRESOURCEA( s_nAllowDarkModeForWindow ) ) );
 
 	if ( pSetPreferredAppMode )
@@ -203,6 +212,7 @@ static void ThemeListView( HWND hWnd )
 	ListView_SetTextColor( hWnd, g_ColorText );
 
 	HWND hHeader = ListView_GetHeader( hWnd );
+
 	if ( hHeader )
 	{
 		SetWindowTheme( hHeader, L"DarkMode_ItemsView", nullptr );
@@ -224,6 +234,7 @@ static void ApplyWindowTheme( HWND hWnd )
 	}
 
 	const LONG_PTR nStyle = GetWindowLongPtrW( hWnd, GWL_STYLE );
+
 	if ( !( nStyle & WS_CHILD ) )
 	{
 		const BOOL bDark = TRUE;
@@ -231,6 +242,7 @@ static void ApplyWindowTheme( HWND hWnd )
 	}
 
 	const std::wstring className = ClassName( hWnd );
+
 	if ( className == WC_LISTVIEWW )
 	{
 		ThemeListView( hWnd );
@@ -279,6 +291,7 @@ static void DisableDialogTexture( HWND hWnd )
 static BOOL CALLBACK PostSysColorChange( HWND hWnd, LPARAM )
 {
 	PostMessageW( hWnd, WM_SYSCOLORCHANGE, 0, 0 );
+
 	return TRUE;
 }
 
@@ -288,6 +301,7 @@ static BOOL CALLBACK PostSysColorChange( HWND hWnd, LPARAM )
 static void StartColorRefresh( HWND hWnd )
 {
 	static bool s_bRefreshed = false;
+
 	if ( s_bRefreshed || !ClassStartsWith( hWnd, L"AfxMDIFrame" ) )
 	{
 		return;
@@ -306,6 +320,7 @@ static void StartColorRefresh( HWND hWnd )
 static void ReloadMfcColors( HWND hWnd )
 {
 	static bool s_bDone = false;
+
 	if ( s_bDone )
 	{
 		return;
@@ -330,6 +345,7 @@ static LRESULT OnNcPaint( HWND hWnd, UINT nMsg, WPARAM wParam, LPARAM lParam )
 	MenuBar_PaintNonClient( hWnd );
 	PaintScrollCorner( hWnd );
 	PaintClientEdge( hWnd );
+
 	if ( IsClass( hWnd, TOOLBARCLASSNAMEW ) )
 	{
 		PaintToolbarNonClient( hWnd );
@@ -348,6 +364,7 @@ static bool OnEraseBackground( HWND hWnd, HDC hDC )
 	}
 
 	HBRUSH hBrush = ClassDarkBrush( hWnd );
+
 	if ( !hBrush )
 	{
 		return false;
@@ -356,6 +373,7 @@ static bool OnEraseBackground( HWND hWnd, HDC hDC )
 	RECT rect;
 	GetClientRect( hWnd, &rect );
 	FillRect( hDC, &rect, hBrush );
+
 	return true;
 }
 
@@ -402,6 +420,7 @@ static LRESULT OnPaint( HWND hWnd, UINT nMsg, WPARAM wParam, LPARAM lParam )
 	}
 
 	const std::wstring className = ClassName( hWnd );
+
 	if ( className == TOOLBARCLASSNAMEW )
 	{
 		CheckDisabledImages( hWnd );
@@ -412,6 +431,7 @@ static LRESULT OnPaint( HWND hWnd, UINT nMsg, WPARAM wParam, LPARAM lParam )
 	}
 
 	const LRESULT nResult = DefSubclassProc( hWnd, nMsg, wParam, lParam );
+
 	if ( className == STATUSCLASSNAMEW )
 	{
 		PaintStatusBarBorders( hWnd );
@@ -423,6 +443,7 @@ static LRESULT OnPaint( HWND hWnd, UINT nMsg, WPARAM wParam, LPARAM lParam )
 static bool IsToolbarCustomDraw( LPARAM lParam )
 {
 	const NMHDR *pHeader = reinterpret_cast<const NMHDR *>( lParam );
+
 	return pHeader && pHeader->code == NM_CUSTOMDRAW && IsClass( pHeader->hwndFrom, TOOLBARCLASSNAMEW );
 }
 
@@ -433,6 +454,7 @@ static LRESULT OnStateChange( HWND hWnd, UINT nMsg, WPARAM wParam, LPARAM lParam
 	{
 		const LRESULT nResult = DefSubclassProc( hWnd, nMsg, wParam, lParam );
 		RepaintCheckButton( hWnd );
+
 		return nResult;
 	}
 
@@ -450,6 +472,7 @@ static LRESULT OnStateChange( HWND hWnd, UINT nMsg, WPARAM wParam, LPARAM lParam
 
 	const LRESULT nResult = DefSubclassProc( hWnd, nMsg, wParam, lParam );
 	InvalidateRect( hWnd, nullptr, FALSE );
+
 	return nResult;
 }
 
@@ -461,6 +484,7 @@ static LRESULT CALLBACK DarkSubclassProc( HWND hWnd, UINT nMsg, WPARAM wParam, L
 		{
 			const LRESULT nResult = DefSubclassProc( hWnd, nMsg, wParam, lParam );
 			ApplyWindowTheme( hWnd );
+
 			return nResult;
 		}
 
@@ -475,6 +499,7 @@ static LRESULT CALLBACK DarkSubclassProc( HWND hWnd, UINT nMsg, WPARAM wParam, L
 
 		case WM_UAHDRAWMENU:
 			MenuBar_DrawBackground( hWnd, lParam );
+
 			return TRUE;
 
 		case WM_UAHDRAWMENUITEM:
@@ -504,6 +529,7 @@ static LRESULT CALLBACK DarkSubclassProc( HWND hWnd, UINT nMsg, WPARAM wParam, L
 			if ( IsCheckButton( hWnd ) )
 			{
 				PrintCheckButton( hWnd, reinterpret_cast<HDC>( wParam ) );
+
 				return 0;
 			}
 
@@ -554,6 +580,7 @@ static LRESULT CALLBACK DarkSubclassProc( HWND hWnd, UINT nMsg, WPARAM wParam, L
 		{
 			const LRESULT nResult = DefSubclassProc( hWnd, nMsg, wParam, lParam );
 			DisableDialogTexture( hWnd );
+
 			return nResult;
 		}
 
@@ -595,6 +622,7 @@ static LRESULT CALLBACK CbtProc( int nCode, WPARAM wParam, LPARAM lParam )
 		MarkMessageBox( hWnd );
 
 		const CBT_CREATEWNDW *pCreate = reinterpret_cast<const CBT_CREATEWNDW *>( lParam );
+
 		if ( pCreate->lpcs->dwExStyle & WS_EX_MDICHILD )
 		{
 			s_bDocumentSeen = true;
@@ -607,12 +635,14 @@ static LRESULT CALLBACK CbtProc( int nCode, WPARAM wParam, LPARAM lParam )
 void DarkTheme_Init()
 {
 	const std::wstring ini = ModuleFilePath( L"hppxdark.ini" );
+
 	if ( !GetPrivateProfileIntW( L"DarkTheme", L"Enabled", 1, ini.c_str() ) )
 	{
 		return;
 	}
 
 	LoadPalette( ini );
+
 	if ( !SystemColors_Init() )
 	{
 		return;

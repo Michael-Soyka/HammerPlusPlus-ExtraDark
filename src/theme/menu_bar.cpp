@@ -18,13 +18,13 @@ struct UahMenu_t
 
 union UahMenuItemMetrics_t
 {
-	SIZE	m_Bar[2];
-	SIZE	m_Popup[4];
+	SIZE	m_Bar[ 2 ];
+	SIZE	m_Popup[ 4 ];
 };
 
 struct UahMenuPopupMetrics_t
 {
-	DWORD	m_nWidths[4];
+	DWORD	m_nWidths[ 4 ];
 	DWORD	m_nUpdateMaxWidths : 2;
 };
 
@@ -47,6 +47,7 @@ void MenuBar_DrawBackground( HWND hWnd, LPARAM lParam )
 	const UahMenu_t *pMenu = reinterpret_cast<const UahMenu_t *>( lParam );
 
 	MENUBARINFO info = { sizeof( info ) };
+
 	if ( !GetMenuBarInfo( hWnd, OBJID_MENU, 0, &info ) )
 	{
 		return;
@@ -69,7 +70,8 @@ static HBITMAP MenuItemBitmap( HMENU hMenu, int nPosition, const MENUITEMINFOW &
 	}
 
 	MENUITEMINFOW type = { sizeof( type ) };
-	type.fMask = MIIM_TYPE;
+	type.fMask         = MIIM_TYPE;
+
 	if ( !GetMenuItemInfoW( hMenu, nPosition, TRUE, &type ) )
 	{
 		return nullptr;
@@ -82,14 +84,15 @@ static HBITMAP MenuItemBitmap( HMENU hMenu, int nPosition, const MENUITEMINFOW &
 static bool IsSystemIconItem( HMENU hMenu, int nPosition )
 {
 	MENUITEMINFOW info = { sizeof( info ) };
-	info.fMask = MIIM_FTYPE | MIIM_BITMAP | MIIM_DATA;
+	info.fMask         = MIIM_FTYPE | MIIM_BITMAP | MIIM_DATA;
+
 	if ( !GetMenuItemInfoW( hMenu, nPosition, TRUE, &info ) )
 	{
 		return false;
 	}
 
 	HBITMAP hBitmap = MenuItemBitmap( hMenu, nPosition, info );
-	HWND hDocument = reinterpret_cast<HWND>( info.dwItemData );
+	HWND hDocument  = reinterpret_cast<HWND>( info.dwItemData );
 	Log( "menu item %d: type %x, bitmap %p, data %p", nPosition, info.fType, hBitmap, hDocument );
 
 	return hBitmap == HBMMENU_SYSTEM && IsWindow( hDocument );
@@ -111,13 +114,14 @@ static bool DrawBitmapItem( const UahDrawMenuItem_t &item )
 	}
 
 	HideSystemIcon( item.m_Menu.m_hDC, item.m_Draw.rcItem );
+
 	return true;
 }
 
 static void DrawTextItem( const UahDrawMenuItem_t &item, const wchar_t *pwszText )
 {
-	const UINT nState = item.m_Draw.itemState;
-	const bool bHot = ( nState & ( ODS_HOTLIGHT | ODS_SELECTED ) ) != 0;
+	const UINT nState    = item.m_Draw.itemState;
+	const bool bHot      = ( nState & ( ODS_HOTLIGHT | ODS_SELECTED ) ) != 0;
 	const bool bDisabled = ( nState & ( ODS_INACTIVE | ODS_DISABLED | ODS_GRAYED ) ) != 0;
 
 	HDC hDC = item.m_Menu.m_hDC;
@@ -125,6 +129,7 @@ static void DrawTextItem( const UahDrawMenuItem_t &item, const wchar_t *pwszText
 	FillRect( hDC, &rect, bHot ? MenuHotBrush() : DarkBrush( COLOR_MENUBAR ) );
 
 	UINT nFlags = DT_CENTER | DT_SINGLELINE | DT_VCENTER;
+
 	if ( nState & ODS_NOACCEL )
 	{
 		nFlags |= DT_HIDEPREFIX;
@@ -145,11 +150,12 @@ bool MenuBar_DrawItem( HWND hWnd, LPARAM lParam )
 		return false;
 	}
 
-	wchar_t wszText[256] = {};
-	MENUITEMINFOW info = { sizeof( info ) };
-	info.fMask = MIIM_STRING | MIIM_FTYPE | MIIM_BITMAP;
-	info.dwTypeData = wszText;
-	info.cch = ARRAYSIZE( wszText ) - 1;
+	wchar_t wszText[ 256 ] = {};
+	MENUITEMINFOW info   = { sizeof( info ) };
+	info.fMask           = MIIM_STRING | MIIM_FTYPE | MIIM_BITMAP;
+	info.dwTypeData      = wszText;
+	info.cch             = ARRAYSIZE( wszText ) - 1;
+
 	if ( !GetMenuItemInfoW( item.m_Menu.m_hMenu, item.m_Item.m_nPosition, TRUE, &info ) )
 	{
 		return false;
@@ -161,13 +167,14 @@ bool MenuBar_DrawItem( HWND hWnd, LPARAM lParam )
 	}
 
 	DrawTextItem( item, wszText );
+
 	return true;
 }
 
 // The light line user32 leaves between the menu bar and the client area
 static void PaintBottomLine( HWND hWnd, HDC hDC )
 {
-	RECT line = ClientRectInWindow( hWnd );
+	RECT line   = ClientRectInWindow( hWnd );
 	line.bottom = line.top;
 	line.top--;
 
@@ -178,6 +185,7 @@ static void PaintBottomLine( HWND hWnd, HDC hDC )
 static void PaintSystemIcon( HWND hWnd, HMENU hMenu, HDC hDC )
 {
 	RECT rect;
+
 	if ( !IsSystemIconItem( hMenu, 0 ) || !GetMenuItemRect( hWnd, hMenu, 0, &rect ) )
 	{
 		return;
@@ -193,7 +201,8 @@ static void PaintSystemIcon( HWND hWnd, HMENU hMenu, HDC hDC )
 void MenuBar_PaintNonClient( HWND hWnd )
 {
 	MENUBARINFO info = { sizeof( info ) };
-	HMENU hMenu = GetMenu( hWnd );
+	HMENU hMenu      = GetMenu( hWnd );
+
 	if ( !GetMenuBarInfo( hWnd, OBJID_MENU, 0, &info ) )
 	{
 		return;

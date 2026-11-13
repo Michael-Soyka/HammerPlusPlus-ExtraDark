@@ -16,15 +16,15 @@ static const ULONGLONG s_nOrdinalMask = 0xFFFF;
 
 struct NtHeaders_t
 {
-	bool					m_b64 = false;
-	IMAGE_DATA_DIRECTORY	m_Imports = {};
-	size_t					m_nSections = 0;
+	bool					m_b64           = false;
+	IMAGE_DATA_DIRECTORY	m_Imports       = {};
+	size_t					m_nSections     = 0;
 	WORD					m_nSectionCount = 0;
 };
 
 struct Thunk_t
 {
-	ULONGLONG	m_nValue = 0;
+	ULONGLONG	m_nValue   = 0;
 	bool		m_bOrdinal = false;
 };
 
@@ -37,20 +37,22 @@ static bool ReadAt( const Bytes_t &bytes, size_t nOffset, T &value )
 	}
 
 	std::memcpy( &value, bytes.data() + nOffset, sizeof( T ) );
+
 	return true;
 }
 
 static bool ReadString( const Bytes_t &bytes, size_t nOffset, std::string &text )
 {
 	text.clear();
+
 	for ( size_t n = nOffset; n < bytes.size(); n++ )
 	{
-		if ( !bytes[n] )
+		if ( !bytes[ n ] )
 		{
 			return true;
 		}
 
-		text.push_back( static_cast<char>( bytes[n] ) );
+		text.push_back( static_cast<char>( bytes[ n ] ) );
 	}
 
 	return false;
@@ -61,9 +63,11 @@ static bool RvaToOffset( const Sections_t &sections, ULONGLONG nRva, size_t &nOf
 	for ( const IMAGE_SECTION_HEADER &section : sections )
 	{
 		const ULONGLONG nEnd = static_cast<ULONGLONG>( section.VirtualAddress ) + section.Misc.VirtualSize;
+
 		if ( nRva >= section.VirtualAddress && nRva < nEnd )
 		{
 			nOffset = static_cast<size_t>( nRva - section.VirtualAddress + section.PointerToRawData );
+
 			return true;
 		}
 	}
@@ -75,36 +79,42 @@ template <typename Optional_t>
 static bool ReadImportDirectory( const Bytes_t &bytes, size_t nOptional, IMAGE_DATA_DIRECTORY &imports )
 {
 	Optional_t optional = {};
+
 	if ( !ReadAt( bytes, nOptional, optional ) )
 	{
 		return false;
 	}
 
-	imports = optional.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+	imports = optional.DataDirectory[ IMAGE_DIRECTORY_ENTRY_IMPORT ];
+
 	return true;
 }
 
 static bool ReadNtHeaders( const Bytes_t &bytes, NtHeaders_t &headers, std::string &error )
 {
-	IMAGE_DOS_HEADER dos = {};
-	DWORD nSignature = 0;
-	IMAGE_FILE_HEADER file = {};
+	IMAGE_DOS_HEADER dos     = {};
+	DWORD nSignature         = 0;
+	IMAGE_FILE_HEADER file   = {};
 	const size_t nFileHeader = sizeof( DWORD );
 
 	const bool bPe = ReadAt( bytes, 0, dos ) && dos.e_magic == IMAGE_DOS_SIGNATURE &&
 		ReadAt( bytes, dos.e_lfanew, nSignature ) && nSignature == IMAGE_NT_SIGNATURE &&
 		ReadAt( bytes, dos.e_lfanew + nFileHeader, file );
+
 	if ( !bPe )
 	{
 		error = "not a PE file";
+
 		return false;
 	}
 
 	const size_t nOptional = static_cast<size_t>( dos.e_lfanew ) + nFileHeader + sizeof( IMAGE_FILE_HEADER );
+
 	WORD nMagic = 0;
 	ReadAt( bytes, nOptional, nMagic );
 
 	bool bRead = false;
+
 	if ( nMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC )
 	{
 		headers.m_b64 = true;
@@ -118,11 +128,13 @@ static bool ReadNtHeaders( const Bytes_t &bytes, NtHeaders_t &headers, std::stri
 	if ( !bRead )
 	{
 		error = "unknown PE optional header";
+
 		return false;
 	}
 
-	headers.m_nSections = nOptional + file.SizeOfOptionalHeader;
+	headers.m_nSections     = nOptional + file.SizeOfOptionalHeader;
 	headers.m_nSectionCount = file.NumberOfSections;
+
 	return true;
 }
 
@@ -130,9 +142,11 @@ static bool ReadNtHeaders( const Bytes_t &bytes, NtHeaders_t &headers, std::stri
 static Sections_t ReadSections( const Bytes_t &bytes, const NtHeaders_t &headers )
 {
 	Sections_t sections;
+
 	for ( WORD i = 0; i < headers.m_nSectionCount; i++ )
 	{
 		IMAGE_SECTION_HEADER section = {};
+
 		if ( ReadAt( bytes, headers.m_nSections + ( i * sizeof( IMAGE_SECTION_HEADER ) ), section ) )
 		{
 			sections.push_back( section );
@@ -146,6 +160,7 @@ static Sections_t ReadSections( const Bytes_t &bytes, const NtHeaders_t &headers
 static Thunk_t ReadThunk( const Bytes_t &bytes, size_t nOffset, bool b64 )
 {
 	Thunk_t thunk;
+
 	if ( b64 )
 	{
 		ReadAt( bytes, nOffset, thunk.m_nValue );
@@ -155,7 +170,7 @@ static Thunk_t ReadThunk( const Bytes_t &bytes, size_t nOffset, bool b64 )
 	{
 		DWORD nValue = 0;
 		ReadAt( bytes, nOffset, nValue );
-		thunk.m_nValue = nValue;
+		thunk.m_nValue   = nValue;
 		thunk.m_bOrdinal = ( nValue & IMAGE_ORDINAL_FLAG32 ) != 0;
 	}
 
@@ -166,6 +181,7 @@ static std::string ReadFunctionName( const Bytes_t &bytes, const Sections_t &sec
 {
 	std::string function;
 	size_t nName = 0;
+
 	if ( thunk.m_bOrdinal )
 	{
 		function = "#" + std::to_string( thunk.m_nValue & s_nOrdinalMask );
@@ -184,9 +200,11 @@ static std::vector<std::string> ReadImportFunctions( const Bytes_t &bytes, const
 	const size_t nThunkSize = b64 ? sizeof( ULONGLONG ) : sizeof( DWORD );
 
 	std::vector<std::string> functions;
+
 	for ( ;; nThunk += nThunkSize )
 	{
 		const Thunk_t thunk = ReadThunk( bytes, nThunk, b64 );
+
 		if ( !thunk.m_nValue )
 		{
 			break;
@@ -207,45 +225,54 @@ static bool ReadImport( const Bytes_t &bytes, const Sections_t &sections, const 
 	const bool bRead = RvaToOffset( sections, descriptor.Name, import.m_nNameOffset ) &&
 		ReadString( bytes, import.m_nNameOffset, import.m_Name ) &&
 		RvaToOffset( sections, nLookup, nThunk );
+
 	if ( !bRead )
 	{
 		return false;
 	}
 
 	import.m_Functions = ReadImportFunctions( bytes, sections, nThunk, b64 );
+
 	return true;
 }
 
 bool ReadImage( const Bytes_t &bytes, Image_t &image, std::string &error )
 {
 	NtHeaders_t headers;
+
 	if ( !ReadNtHeaders( bytes, headers, error ) )
 	{
 		return false;
 	}
 
 	image.m_b64 = headers.m_b64;
+
 	const Sections_t sections = ReadSections( bytes, headers );
 
 	size_t nDescriptor = 0;
+
 	if ( !RvaToOffset( sections, headers.m_Imports.VirtualAddress, nDescriptor ) )
 	{
 		error = "no import table";
+
 		return false;
 	}
 
 	for ( ;; nDescriptor += sizeof( IMAGE_IMPORT_DESCRIPTOR ) )
 	{
 		IMAGE_IMPORT_DESCRIPTOR descriptor = {};
+
 		if ( !ReadAt( bytes, nDescriptor, descriptor ) || !descriptor.Name )
 		{
 			break;
 		}
 
 		Import_t import;
+
 		if ( !ReadImport( bytes, sections, descriptor, image.m_b64, import ) )
 		{
 			error = "broken import descriptor";
+
 			return false;
 		}
 

@@ -116,6 +116,7 @@ void PaintToolbarNonClient( HWND hWnd )
 void PaintScrollCorner( HWND hWnd )
 {
 	const LONG_PTR nBoth = WS_VSCROLL | WS_HSCROLL;
+
 	if ( ( GetWindowLongPtrW( hWnd, GWL_STYLE ) & nBoth ) != nBoth )
 	{
 		return;
@@ -139,7 +140,9 @@ void PaintClientEdge( HWND hWnd )
 	}
 
 	const std::wstring className = ClassName( hWnd );
+
 	const bool bEdit = className == WC_EDITW || className == WC_LISTBOXW;
+
 	if ( !bEdit && className != WC_LISTVIEWW && className != WC_TREEVIEWW )
 	{
 		return;
@@ -157,6 +160,7 @@ void PaintClientEdge( HWND hWnd )
 void ThemeLateScrollBars( HWND hWnd )
 {
 	const bool bScrolls = ( GetWindowLongPtrW( hWnd, GWL_STYLE ) & ( WS_VSCROLL | WS_HSCROLL ) ) != 0;
+
 	if ( !bScrolls || GetPropW( hWnd, s_pwszScrollProp ) || !ClassStartsWith( hWnd, L"Afx" ) )
 	{
 		return;
@@ -194,6 +198,7 @@ static RECT PaintTabBody( HWND hWnd, HDC hDC )
 	RestoreDC( hDC, nSaved );
 
 	FrameRect( hDC, &body, BorderBrush() );
+
 	return body;
 }
 
@@ -226,6 +231,7 @@ static void DrawTabText( HWND hWnd, HDC hDC, int nTab, RECT &rect )
 static void PaintTab( HWND hWnd, HDC hDC, int nTab, bool bSelected, const RECT &body )
 {
 	RECT tab;
+
 	if ( !TabCtrl_GetItemRect( hWnd, nTab, &tab ) )
 	{
 		return;
@@ -280,6 +286,7 @@ void PaintStatusBarBorders( HWND hWnd )
 	for ( int i = 0; i < nParts; i++ )
 	{
 		RECT rect;
+
 		if ( SendMessageW( hWnd, SB_GETRECT, i, reinterpret_cast<LPARAM>( &rect ) ) )
 		{
 			FrameRect( hDC, &rect, BorderBrush() );
@@ -304,8 +311,8 @@ void PaintGroupBox( HWND hWnd )
 	{
 		const ControlFont_t font( hWnd, hDC );
 
-		wchar_t wszText[256] = {};
-		const int nLength = GetWindowTextW( hWnd, wszText, ARRAYSIZE( wszText ) );
+	wchar_t wszText[ 256 ] = {};
+	const int nLength      = GetWindowTextW( hWnd, wszText, ARRAYSIZE( wszText ) );
 
 		// An empty caption still keeps the line at half the text height
 		SIZE textSize = {};
@@ -343,6 +350,7 @@ static bool HasNeighborGroupBox( HWND hDialog, HWND hBox, const RECT &box )
 		}
 
 		const RECT other = ChildRect( hDialog, hOther );
+
 		if ( other.left >= box.right - 1 && other.top < box.bottom && other.bottom > box.top )
 		{
 			return true;
@@ -360,6 +368,7 @@ void AlignGroupBoxes( HWND hDialog )
 {
 	// Property sheet pages only (a tab control next to them), not the Hammer++ panels
 	HWND hSheet = GetParent( hDialog );
+
 	if ( !hSheet || !FindWindowExW( hSheet, nullptr, WC_TABCONTROLW, nullptr ) )
 	{
 		return;
@@ -375,9 +384,10 @@ void AlignGroupBoxes( HWND hDialog )
 			continue;
 		}
 
-		const RECT box = ChildRect( hDialog, hBox );
-		const LONG nTarget = client.right - box.left;
+		const RECT box          = ChildRect( hDialog, hBox );
+		const LONG nTarget      = client.right - box.left;
 		const bool bFarFromEdge = box.right < ( client.right * 3 ) / 4;
+
 		if ( box.right >= nTarget || bFarFromEdge || HasNeighborGroupBox( hDialog, hBox, box ) )
 		{
 			continue;
@@ -404,6 +414,7 @@ struct CheckButton_t
 bool IsCheckButton( HWND hWnd )
 {
 	const LONG_PTR nStyle = GetWindowLongPtrW( hWnd, GWL_STYLE );
+
 	switch ( nStyle & BS_TYPEMASK )
 	{
 		case BS_CHECKBOX:
@@ -421,12 +432,12 @@ bool IsCheckButton( HWND hWnd )
 static CheckButton_t ReadCheckButton( HWND hWnd )
 {
 	CheckButton_t button;
-	button.m_nStyle = GetWindowLongPtrW( hWnd, GWL_STYLE );
+	button.m_nStyle      = GetWindowLongPtrW( hWnd, GWL_STYLE );
 	const LONG_PTR nType = button.m_nStyle & BS_TYPEMASK;
-	button.m_bRadio = nType == BS_RADIOBUTTON || nType == BS_AUTORADIOBUTTON;
-	button.m_bEnabled = IsWindowEnabled( hWnd ) != FALSE;
-	button.m_nState = SendMessageW( hWnd, BM_GETSTATE, 0, 0 );
-	button.m_nUiState = SendMessageW( hWnd, WM_QUERYUISTATE, 0, 0 );
+	button.m_bRadio      = nType == BS_RADIOBUTTON || nType == BS_AUTORADIOBUTTON;
+	button.m_bEnabled    = IsWindowEnabled( hWnd ) != FALSE;
+	button.m_nState      = SendMessageW( hWnd, BM_GETSTATE, 0, 0 );
+	button.m_nUiState    = SendMessageW( hWnd, WM_QUERYUISTATE, 0, 0 );
 
 	return button;
 }
@@ -446,6 +457,7 @@ static int CheckValue( const CheckButton_t &button )
 static int CheckPartState( const CheckButton_t &button )
 {
 	int nLook = 0;
+
 	if ( !button.m_bEnabled )
 	{
 		nLook = 3;
@@ -521,6 +533,7 @@ static UINT CaptionFormat( const CheckButton_t &button )
 static void DrawCaptionFocus( HDC hDC, const RECT &text, LONG nTextWidth, UINT nFormat )
 {
 	RECT focus = text;
+
 	if ( nFormat & DT_CENTER )
 	{
 		focus.left += ( text.right - text.left - nTextWidth ) / 2;
@@ -539,15 +552,17 @@ static void DrawCaptionFocus( HDC hDC, const RECT &text, LONG nTextWidth, UINT n
 
 static void DrawCaption( HWND hWnd, HDC hDC, const CheckButton_t &button, const RECT &client, const RECT &box )
 {
-	wchar_t wszText[256] = {};
-	const int nLength = GetWindowTextW( hWnd, wszText, ARRAYSIZE( wszText ) );
+	wchar_t wszText[ 256 ] = {};
+	const int nLength      = GetWindowTextW( hWnd, wszText, ARRAYSIZE( wszText ) );
+
 	if ( !nLength )
 	{
 		return;
 	}
 
 	const LONG nGap = ( box.right - box.left ) / 3;
-	RECT text = client;
+	RECT text       = client;
+
 	if ( button.m_nStyle & BS_LEFTTEXT )
 	{
 		text.right = box.left - nGap;
@@ -558,11 +573,11 @@ static void DrawCaption( HWND hWnd, HDC hDC, const CheckButton_t &button, const 
 	}
 
 	const UINT nFormat = CaptionFormat( button );
-	RECT bounds = text;
+	RECT bounds        = text;
 	DrawTextW( hDC, wszText, nLength, &bounds, nFormat | DT_CALCRECT );
 	const LONG nTextHeight = bounds.bottom - bounds.top;
 
-	text.top = AlignVertically( button.m_nStyle & BS_VCENTER, nTextHeight, client.bottom );
+	text.top    = AlignVertically( button.m_nStyle & BS_VCENTER, nTextHeight, client.bottom );
 	text.bottom = text.top + nTextHeight;
 
 	SetBkMode( hDC, TRANSPARENT );
@@ -588,6 +603,7 @@ void PrintCheckButton( HWND hWnd, HDC hTarget )
 {
 	RECT client;
 	GetClientRect( hWnd, &client );
+
 	if ( client.right <= 0 || client.bottom <= 0 )
 	{
 		return;
@@ -642,24 +658,25 @@ void RepaintCheckButton( HWND hWnd )
 struct UpDownHalves_t
 {
 	// Up or left, then down or right
-	RECT	m_Half[2];
+	RECT	m_Half[ 2 ];
 	RECT	m_Divider;
 };
 
 static UpDownHalves_t SplitUpDown( const RECT &client, bool bHorizontal )
 {
 	UpDownHalves_t halves = { { client, client }, client };
+
 	if ( bHorizontal )
 	{
-		halves.m_Half[0].right = client.right / 2;
-		halves.m_Half[1].left = halves.m_Half[0].right;
-		halves.m_Divider = { halves.m_Half[1].left, client.top, halves.m_Half[1].left + 1, client.bottom };
+		halves.m_Half[ 0 ].right = client.right / 2;
+		halves.m_Half[ 1 ].left  = halves.m_Half[ 0 ].right;
+		halves.m_Divider         = { halves.m_Half[ 1 ].left, client.top, halves.m_Half[ 1 ].left + 1, client.bottom };
 	}
 	else
 	{
-		halves.m_Half[0].bottom = client.bottom / 2;
-		halves.m_Half[1].top = halves.m_Half[0].bottom;
-		halves.m_Divider = { client.left, halves.m_Half[1].top, client.right, halves.m_Half[1].top + 1 };
+		halves.m_Half[ 0 ].bottom = client.bottom / 2;
+		halves.m_Half[ 1 ].top    = halves.m_Half[ 0 ].bottom;
+		halves.m_Divider          = { client.left, halves.m_Half[ 1 ].top, client.right, halves.m_Half[ 1 ].top + 1 };
 	}
 
 	return halves;
@@ -668,9 +685,9 @@ static UpDownHalves_t SplitUpDown( const RECT &client, bool bHorizontal )
 // Triangle pointing away from the middle of the control
 static void DrawUpDownArrow( HDC hDC, const RECT &half, bool bHorizontal, bool bFirst )
 {
-	const LONG nX = ( half.left + half.right ) / 2;
-	const LONG nY = ( half.top + half.bottom ) / 2;
-	const LONG nSize = max( 2L, min( half.right - half.left, half.bottom - half.top ) / 4 );
+	const LONG nX        = ( half.left + half.right ) / 2;
+	const LONG nY        = ( half.top + half.bottom ) / 2;
+	const LONG nSize     = max( 2L, min( half.right - half.left, half.bottom - half.top ) / 4 );
 	const LONG nHalfSize = nSize / 2;
 	const LONG nCenter = bHorizontal ? nX : nY;
 	const LONG nTip = bFirst ? nCenter - nHalfSize : nCenter + nHalfSize;
@@ -679,15 +696,15 @@ static void DrawUpDownArrow( HDC hDC, const RECT &half, bool bHorizontal, bool b
 	POINT points[3];
 	if ( bHorizontal )
 	{
-		points[0] = { nTip, nY };
-		points[1] = { nBase, nY - nSize };
-		points[2] = { nBase, nY + nSize };
+		points[ 0 ] = { nTip, nY };
+		points[ 1 ] = { nBase, nY - nSize };
+		points[ 2 ] = { nBase, nY + nSize };
 	}
 	else
 	{
-		points[0] = { nX, nTip };
-		points[1] = { nX - nSize, nBase };
-		points[2] = { nX + nSize, nBase };
+		points[ 0 ] = { nX, nTip };
+		points[ 1 ] = { nX - nSize, nBase };
+		points[ 2 ] = { nX + nSize, nBase };
 	}
 
 	Polygon( hDC, points, ARRAYSIZE( points ) );
@@ -702,8 +719,8 @@ void PaintUpDown( HWND hWnd )
 	GetClientRect( hWnd, &client );
 
 	const bool bHorizontal = ( GetWindowLongPtrW( hWnd, GWL_STYLE ) & UDS_HORZ ) != 0;
-	const bool bEnabled = IsWindowEnabled( hWnd ) != FALSE;
-	const bool bCaptured = GetCapture() == hWnd;
+	const bool bEnabled    = IsWindowEnabled( hWnd ) != FALSE;
+	const bool bCaptured   = GetCapture() == hWnd;
 
 	POINT cursor;
 	GetCursorPos( &cursor );
@@ -760,11 +777,12 @@ LRESULT ToolbarCustomDraw( NMTBCUSTOMDRAW *pDraw )
 		return CDRF_DODEFAULT;
 	}
 
-	const UINT nState = pDraw->nmcd.uItemState;
+	const UINT nState   = pDraw->nmcd.uItemState;
 	const bool bEnabled = !( nState & CDIS_DISABLED );
 	const bool bPressed = ( nState & CDIS_SELECTED ) != 0;
 	const bool bChecked = ( nState & CDIS_CHECKED ) != 0;
-	const bool bHot = ( nState & CDIS_HOT ) != 0;
+	const bool bHot     = ( nState & CDIS_HOT ) != 0;
+
 	if ( bEnabled && ( bPressed || bChecked || bHot ) )
 	{
 		const COLORREF fill = ( bPressed || ( bChecked && bHot ) ) ? g_ColorHilight : g_ColorMenuHot;

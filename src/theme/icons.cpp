@@ -13,13 +13,13 @@
 
 // RT_BITMAP and RT_GROUP_ICON as numbers: the project builds without UNICODE
 static const ULONG_PTR s_nBitmapType = 2;
-static const ULONG_PTR s_nIconType = 14;
+static const ULONG_PTR s_nIconType   = 14;
 
 static HMODULE s_hSelf   = nullptr;
 static HMODULE s_hHammer = nullptr;
 
 // Resources handed out from hppxdark.dll: LoadResource and SizeofResource get them with our module
-static HRSRC s_hOwnResources[64];
+static HRSRC s_hOwnResources[ 64 ];
 static int s_nOwnResources = 0;
 
 using FindResourceA_t   = HRSRC ( WINAPI * )( HMODULE, LPCSTR, LPCSTR );
@@ -46,13 +46,13 @@ static FARPROC s_pLoadIconW       = nullptr;
 
 // Visgroup tree check boxes: unchecked, unchecked, checked, partly checked
 static const ULONG_PTR s_nCheckStrip = 223;
-static const int s_nCheckCell = 16;
-static const int s_nCheckStates[] = { CBS_UNCHECKEDNORMAL, CBS_UNCHECKEDNORMAL, CBS_CHECKEDNORMAL, CBS_MIXEDNORMAL };
+static const int s_nCheckCell        = 16;
+static const int s_nCheckStates[]    = { CBS_UNCHECKEDNORMAL, CBS_UNCHECKEDNORMAL, CBS_CHECKEDNORMAL, CBS_MIXEDNORMAL };
 
 // Image list mask color of the strip, white: the cell outside the glyph. Inside the glyphs
 // the white pixels become the nearest other color
-static const COLORREF s_CheckMask = RGB( 255, 255, 255 );
-static const DWORD s_nMaskPixel = 0x00FFFFFF;
+static const COLORREF s_CheckMask   = RGB( 255, 255, 255 );
+static const DWORD s_nMaskPixel     = 0x00FFFFFF;
 static const DWORD s_nNearMaskPixel = 0x00FEFEFE;
 
 static COLORREF s_Background = RGB( 30, 30, 30 );
@@ -75,7 +75,7 @@ static bool IsOwnResource( HRSRC hResource )
 {
 	for ( int i = 0; i < s_nOwnResources; i++ )
 	{
-		if ( s_hOwnResources[i] == hResource )
+		if ( s_hOwnResources[ i ] == hResource )
 		{
 			return true;
 		}
@@ -88,7 +88,7 @@ static void RememberOwnResource( HRSRC hResource )
 {
 	if ( hResource && !IsOwnResource( hResource ) && s_nOwnResources < ARRAYSIZE( s_hOwnResources ) )
 	{
-		s_hOwnResources[s_nOwnResources++] = hResource;
+		s_hOwnResources[ s_nOwnResources++ ] = hResource;
 	}
 }
 
@@ -131,9 +131,9 @@ static HINSTANCE ImageModule( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, 
 static RECT CheckGlyphBox( int nCell, const SIZE &glyph )
 {
 	RECT box;
-	box.left = ( nCell * s_nCheckCell ) + ( ( s_nCheckCell - glyph.cx ) / 2 );
-	box.top = ( s_nCheckCell - glyph.cy ) / 2;
-	box.right = box.left + glyph.cx;
+	box.left   = ( nCell * s_nCheckCell ) + ( ( s_nCheckCell - glyph.cx ) / 2 );
+	box.top    = ( s_nCheckCell - glyph.cy ) / 2;
+	box.right  = box.left + glyph.cx;
 	box.bottom = box.top + glyph.cy;
 
 	return box;
@@ -163,7 +163,7 @@ static void DrawCheckGlyphs( HTHEME hTheme, HDC hDC, const SIZE &glyph )
 	{
 		const RECT box = CheckGlyphBox( i, glyph );
 		FillWith( hDC, box, s_Background );
-		DrawThemeBackground( hTheme, hDC, BP_CHECKBOX, s_nCheckStates[i], &box, nullptr );
+		DrawThemeBackground( hTheme, hDC, BP_CHECKBOX, s_nCheckStates[ i ], &box, nullptr );
 	}
 }
 
@@ -172,11 +172,13 @@ static void KeepGlyphsOpaque( DWORD *pPixels, int nWidth, const SIZE &glyph )
 	for ( int i = 0; i < ARRAYSIZE( s_nCheckStates ); i++ )
 	{
 		const RECT box = CheckGlyphBox( i, glyph );
+
 		for ( LONG y = box.top; y < box.bottom; y++ )
 		{
 			for ( LONG x = box.left; x < box.right; x++ )
 			{
-				DWORD &pixel = pPixels[( y * nWidth ) + x];
+				DWORD &pixel = pPixels[ ( y * nWidth ) + x ];
+
 				if ( ( pixel & s_nMaskPixel ) == s_nMaskPixel )
 				{
 					pixel = s_nNearMaskPixel;
@@ -198,12 +200,12 @@ static HBITMAP CreateCheckStrip()
 
 	const int nWidth = s_nCheckCell * ARRAYSIZE( s_nCheckStates );
 
-	BITMAPINFO info = {};
-	info.bmiHeader.biSize = sizeof( info.bmiHeader );
-	info.bmiHeader.biWidth = nWidth;
-	info.bmiHeader.biHeight = -s_nCheckCell;
-	info.bmiHeader.biPlanes = 1;
-	info.bmiHeader.biBitCount = 32;
+	BITMAPINFO info              = {};
+	info.bmiHeader.biSize        = sizeof( info.bmiHeader );
+	info.bmiHeader.biWidth       = nWidth;
+	info.bmiHeader.biHeight      = -s_nCheckCell;
+	info.bmiHeader.biPlanes      = 1;
+	info.bmiHeader.biBitCount    = 32;
 	info.bmiHeader.biCompression = BI_RGB;
 
 	DWORD *pPixels = nullptr;

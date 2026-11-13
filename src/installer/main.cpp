@@ -69,7 +69,7 @@ struct Box_t
 };
 
 // The path edit sits inside a drawn rounded frame with a padding
-static const Box_t s_PathFrame   = { 16, 84, 470, 32 };
+static const Box_t s_PathFrame    = { 16, 84, 470, 32 };
 static const int   s_nPathPadding = 7;
 
 struct App_t
@@ -84,8 +84,8 @@ struct App_t
 	HWND		m_hRepatch = nullptr;
 	HWND		m_hLaunch  = nullptr;
 
-	HFONT		m_hFont      = nullptr;
-	HFONT		m_hTitleFont = nullptr;
+	HFONT		m_hFont       = nullptr;
+	HFONT		m_hTitleFont  = nullptr;
 	HBRUSH		m_hBackground = nullptr;
 	HBRUSH		m_hField      = nullptr;
 
@@ -148,6 +148,7 @@ static bool IsOutdated( const HammerDir_t &hammer )
 static std::wstring DescribeVersion( const HammerDir_t &hammer )
 {
 	const std::wstring installer = FormatVersion( InstallerVersion() );
+
 	if ( hammer.m_nState != HAMMER_STATE_PATCHED )
 	{
 		return L"Installer version " + installer;
@@ -166,6 +167,7 @@ static std::wstring DescribeVersion( const HammerDir_t &hammer )
 static StatusLine_t DescribeStatus( const HammerDir_t &hammer )
 {
 	StatusLine_t status = { L"Enter, browse or drop the game bin folder", s_nDim };
+
 	switch ( hammer.m_nState )
 	{
 		case HAMMER_STATE_EMPTY:
@@ -201,6 +203,7 @@ static void UpdateButtons( const HammerDir_t &hammer )
 
 	// Patch and Launch share a place: hide first, then show
 	const HWND hPatchedRow[] = { s_App.m_hRemove, s_App.m_hRepatch, s_App.m_hLaunch };
+
 	if ( bPatched )
 	{
 		ShowWindow( s_App.m_hPatch, SW_HIDE );
@@ -223,7 +226,9 @@ static void Refresh()
 	const HammerDir_t &hammer = s_App.m_Hammer;
 
 	const StatusLine_t status = DescribeStatus( hammer );
+
 	s_App.m_nStatusColor = status.m_nColor;
+	
 	SetWindowTextW( s_App.m_hStatus, status.m_Text.c_str() );
 	SetWindowTextW( s_App.m_hVersion, DescribeVersion( hammer ).c_str() );
 
@@ -237,6 +242,7 @@ static void Refresh()
 static void SetResult( const std::wstring &text, COLORREF nColor )
 {
 	s_App.m_nResultColor = nColor;
+	
 	SetWindowTextW( s_App.m_hResult, text.c_str() );
 	InvalidateRect( s_App.m_hResult, nullptr, TRUE );
 }
@@ -261,6 +267,7 @@ static void OnPathChange()
 static void OnPatch()
 {
 	const HammerDir_t &hammer = s_App.m_Hammer;
+
 	if ( hammer.m_nState != HAMMER_STATE_READY && hammer.m_nState != HAMMER_STATE_PATCHED )
 	{
 		return;
@@ -272,6 +279,7 @@ static void OnPatch()
 static void OnRemove()
 {
 	const HammerDir_t &hammer = s_App.m_Hammer;
+
 	if ( hammer.m_nState != HAMMER_STATE_PATCHED )
 	{
 		return;
@@ -283,12 +291,14 @@ static void OnRemove()
 static void OnLaunch()
 {
 	const HammerDir_t &hammer = s_App.m_Hammer;
+
 	if ( hammer.m_nState != HAMMER_STATE_PATCHED )
 	{
 		return;
 	}
 
 	const std::filesystem::path exe = MakeHammerPaths( hammer.m_Dir ).m_Exe;
+
 	const HINSTANCE hResult = ShellExecuteW( s_App.m_hWnd, L"open", exe.c_str(), nullptr, hammer.m_Dir.c_str(), SW_SHOWNORMAL );
 
 	const bool bStarted = reinterpret_cast<INT_PTR>( hResult ) > s_nShellExecuteOk;
@@ -298,21 +308,25 @@ static void OnLaunch()
 static void OnBrowse()
 {
 	IFileOpenDialog *pDialog = nullptr;
+
 	if ( FAILED( CoCreateInstance( CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS( &pDialog ) ) ) )
 	{
 		return;
 	}
 
 	DWORD nOptions = 0;
+
 	pDialog->GetOptions( &nOptions );
 	pDialog->SetOptions( nOptions | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM );
 	pDialog->SetTitle( L"Game bin folder" );
 
 	IShellItem *pItem = nullptr;
-	PWSTR pwszPath = nullptr;
+	PWSTR pwszPath    = nullptr;
+
 	if ( SUCCEEDED( pDialog->Show( s_App.m_hWnd ) ) && SUCCEEDED( pDialog->GetResult( &pItem ) ) && SUCCEEDED( pItem->GetDisplayName( SIGDN_FILESYSPATH, &pwszPath ) ) )
 	{
 		SetWindowTextW( s_App.m_hPath, pwszPath );
+
 		CoTaskMemFree( pwszPath );
 	}
 
@@ -328,10 +342,12 @@ static void OnBrowse()
 static void OnDropFiles( HDROP hDrop )
 {
 	wchar_t wszPath[ MAX_PATH ];
+
 	if ( DragQueryFileW( hDrop, 0, wszPath, MAX_PATH ) )
 	{
 		std::filesystem::path path( wszPath );
 		std::error_code error;
+
 		if ( !std::filesystem::is_directory( path, error ) )
 		{
 			path = path.parent_path();
@@ -403,6 +419,7 @@ static void FillRound( HDC hDC, const RECT &rect, COLORREF nFill, COLORREF nEdge
 static COLORREF ButtonFillColor( const DRAWITEMSTRUCT &item )
 {
 	const bool bAccent = item.CtlID == ID_PATCH || item.CtlID == ID_LAUNCH;
+
 	if ( item.itemState & ODS_DISABLED )
 	{
 		return s_nButton;
@@ -471,6 +488,7 @@ static void OnPaint()
 static COLORREF StaticColor( int nId )
 {
 	COLORREF nColor = s_nText;
+
 	switch ( nId )
 	{
 		case ID_LABEL:
@@ -494,6 +512,7 @@ static LRESULT OnCtlColor( HDC hDC, COLORREF nText, COLORREF nBackground, HBRUSH
 {
 	SetTextColor( hDC, nText );
 	SetBkColor( hDC, nBackground );
+
 	return reinterpret_cast<LRESULT>( hBrush );
 }
 
@@ -508,8 +527,9 @@ static HFONT CreateUiFont( int nSize, int nWeight )
 
 static HICON LoadAppIcon( HINSTANCE hInstance, int nWidthMetric, int nHeightMetric )
 {
-	const int nWidth = GetSystemMetricsForDpi( nWidthMetric, s_App.m_nDpi );
+	const int nWidth  = GetSystemMetricsForDpi( nWidthMetric, s_App.m_nDpi );
 	const int nHeight = GetSystemMetricsForDpi( nHeightMetric, s_App.m_nDpi );
+
 	return static_cast<HICON>( LoadImageW( hInstance, MAKEINTRESOURCEW( IDI_APP ), IMAGE_ICON, nWidth, nHeight, LR_DEFAULTCOLOR ) );
 }
 
@@ -530,7 +550,7 @@ static void AddControl( const ControlSpec_t &spec )
 static void AddControls()
 {
 	const Box_t pathEdit = { s_PathFrame.m_nX + s_nPathPadding, s_PathFrame.m_nY + s_nPathPadding, s_PathFrame.m_nWidth - ( 2 * s_nPathPadding ), s_PathFrame.m_nHeight - ( 2 * s_nPathPadding ) };
-	const DWORD nButton = WS_TABSTOP | BS_OWNERDRAW;
+	const DWORD nButton  = WS_TABSTOP | BS_OWNERDRAW;
 
 	const ControlSpec_t controls[] =
 	{
@@ -578,22 +598,27 @@ static LRESULT CALLBACK WindowProc( HWND hWnd, UINT nMessage, WPARAM wParam, LPA
 	{
 		case WM_CREATE:
 			OnCreate( hWnd );
+
 			return 0;
 
 		case WM_COMMAND:
 			OnCommand( LOWORD( wParam ), HIWORD( wParam ) );
+
 			return 0;
 
 		case WM_DROPFILES:
 			OnDropFiles( reinterpret_cast<HDROP>( wParam ) );
+
 			return 0;
 
 		case WM_DRAWITEM:
 			OnDrawButton( *reinterpret_cast<const DRAWITEMSTRUCT *>( lParam ) );
+
 			return TRUE;
 
 		case WM_PAINT:
 			OnPaint();
+
 			return 0;
 
 		case WM_CTLCOLOREDIT:
@@ -604,6 +629,7 @@ static LRESULT CALLBACK WindowProc( HWND hWnd, UINT nMessage, WPARAM wParam, LPA
 
 		case WM_DESTROY:
 			PostQuitMessage( 0 );
+
 			return 0;
 	}
 
@@ -612,7 +638,7 @@ static LRESULT CALLBACK WindowProc( HWND hWnd, UINT nMessage, WPARAM wParam, LPA
 
 static bool RegisterWindowClass( HINSTANCE hInstance, const wchar_t *pwszName )
 {
-	WNDCLASSEXW windowClass = { sizeof( windowClass ) };
+	WNDCLASSEXW windowClass   = { sizeof( windowClass ) };
 	windowClass.lpfnWndProc   = WindowProc;
 	windowClass.hInstance     = hInstance;
 	windowClass.hCursor       = LoadCursorW( nullptr, IDC_ARROW );
@@ -628,16 +654,18 @@ static bool RegisterWindowClass( HINSTANCE hInstance, const wchar_t *pwszName )
 static HWND CreateMainWindow( HINSTANCE hInstance, const wchar_t *pwszClass )
 {
 	const DWORD nStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
-	RECT window = { 0, 0, Scale( s_nWidth ), Scale( s_nHeight ) };
+	RECT window        = { 0, 0, Scale( s_nWidth ), Scale( s_nHeight ) };
 	AdjustWindowRectExForDpi( &window, nStyle, FALSE, 0, s_App.m_nDpi );
 
 	const std::wstring title = L"Hammer++ Extra Dark " + FormatVersion( InstallerVersion() );
+
 	return CreateWindowExW( 0, pwszClass, title.c_str(), nStyle, CW_USEDEFAULT, CW_USEDEFAULT, window.right - window.left, window.bottom - window.top, nullptr, nullptr, hInstance, nullptr );
 }
 
 static void RunMessageLoop( HWND hWnd )
 {
 	MSG message;
+
 	while ( GetMessageW( &message, nullptr, 0, 0 ) > 0 )
 	{
 		if ( IsDialogMessageW( hWnd, &message ) )
@@ -663,6 +691,7 @@ int WINAPI wWinMain( HINSTANCE hInstance, HINSTANCE, PWSTR, int nShowCmd )
 	RegisterWindowClass( hInstance, pwszClass );
 
 	HWND hWnd = CreateMainWindow( hInstance, pwszClass );
+
 	if ( !hWnd )
 	{
 		return 1;

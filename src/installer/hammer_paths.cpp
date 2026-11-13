@@ -16,6 +16,7 @@ namespace fs = std::filesystem;
 HammerPaths_t MakeHammerPaths( const fs::path &hammerDir )
 {
 	HammerPaths_t paths;
+	
 	paths.m_HammerDir = hammerDir;
 	paths.m_Exe       = hammerDir / L"hammerplusplus.exe";
 	paths.m_ModuleDir = hammerDir / L"hammerplusplus" / L"bin";
@@ -35,6 +36,7 @@ fs::path BackupOf( const fs::path &file )
 bool IsFile( const fs::path &path )
 {
 	std::error_code error;
+
 	return fs::is_regular_file( path, error );
 }
 
@@ -48,18 +50,21 @@ bool CopyOver( const fs::path &from, const fs::path &to )
 {
 	std::error_code error;
 	fs::copy_file( from, to, fs::copy_options::overwrite_existing, error );
+
 	return !error;
 }
 
 bool ReadFileBytes( const fs::path &path, Bytes_t &bytes )
 {
 	std::ifstream file( path, std::ios::binary );
+
 	if ( !file )
 	{
 		return false;
 	}
 
 	bytes.assign( std::istreambuf_iterator<char>( file ), std::istreambuf_iterator<char>() );
+
 	return true;
 }
 
@@ -67,5 +72,6 @@ bool WriteFileBytes( const fs::path &path, const void *pData, size_t nSize )
 {
 	std::ofstream file( path, std::ios::binary | std::ios::trunc );
 	file.write( static_cast<const char *>( pData ), static_cast<std::streamsize>( nSize ) );
+
 	return file.good();
 }

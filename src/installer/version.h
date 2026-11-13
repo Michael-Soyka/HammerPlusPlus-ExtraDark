@@ -12,9 +12,9 @@
 
 struct Version_t
 {
-	unsigned	m_nMajor = 0;
-	unsigned	m_nMinor = 0;
-	unsigned	m_nBuild = 0;
+	unsigned	m_nMajor    = 0;
+	unsigned	m_nMinor    = 0;
+	unsigned	m_nBuild    = 0;
 	unsigned	m_nRevision = 0;
 
 	// FileVersion string: the numbers with a suffix such as -git, empty when absent
