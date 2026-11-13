@@ -6,34 +6,23 @@
 //=============================================================================//
 
 #include "core/gdi.h"
+#include "installer/authors.h"
 #include "installer/hammer_dir.h"
 #include "installer/hammer_paths.h"
+#include "installer/palette.h"
 #include "installer/patcher.h"
 #include "installer/resources.h"
 #include "installer/version.h"
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <gdiplus.h>
 #include <shellapi.h>
 #include <shobjidl.h>
 
 #include <string>
 
 #pragma comment( linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"" )
-
-static const COLORREF s_nBackground    = RGB( 30, 30, 30 );
-static const COLORREF s_nField         = RGB( 45, 45, 48 );
-static const COLORREF s_nBorder        = RGB( 80, 80, 84 );
-static const COLORREF s_nButton        = RGB( 55, 55, 58 );
-static const COLORREF s_nPressed       = RGB( 40, 40, 42 );
-static const COLORREF s_nAccent        = RGB( 0, 120, 215 );
-static const COLORREF s_nAccentPressed = RGB( 0, 95, 170 );
-static const COLORREF s_nButtonText    = RGB( 255, 255, 255 );
-static const COLORREF s_nText          = RGB( 220, 220, 220 );
-static const COLORREF s_nDim           = RGB( 128, 128, 128 );
-static const COLORREF s_nGood          = RGB( 110, 190, 110 );
-static const COLORREF s_nBad           = RGB( 230, 95, 95 );
-static const COLORREF s_nWarning       = RGB( 220, 190, 90 );
 
 // DWMWA_USE_IMMERSIVE_DARK_MODE, Windows 10 20H1+
 static const DWORD s_nDarkTitleBar = 20;
@@ -58,6 +47,7 @@ enum ControlId_t
 	ID_REMOVE,
 	ID_REPATCH,
 	ID_LAUNCH,
+	ID_INFO,
 };
 
 // At 96 DPI
@@ -435,6 +425,10 @@ static void OnCommand( int nId, int nCode )
 		case ID_LAUNCH:
 			OnLaunch();
 			break;
+
+		case ID_INFO:
+			OpenAuthors( s_App.m_hWnd );
+			break;
 	}
 }
 
@@ -514,6 +508,20 @@ static void DrawButtonFocus( const DRAWITEMSTRUCT &item )
 	RoundRect( item.hDC, focus.left, focus.top, focus.right, focus.bottom, Scale( 5 ), Scale( 5 ) );
 }
 
+// The circle around the "i" of the info button
+static void DrawInfoCircle( const DRAWITEMSTRUCT &item )
+{
+	const int nCenterX = ( item.rcItem.left + item.rcItem.right ) / 2;
+	const int nCenterY = ( item.rcItem.top + item.rcItem.bottom ) / 2;
+	const int nRadius  = Scale( 9 );
+
+	const GdiObject_t<HPEN> pen( CreatePen( PS_SOLID, 1, s_nButtonText ) );
+	const SelectedObject_t selectedPen( item.hDC, pen.m_hObject );
+	const SelectedObject_t selectedBrush( item.hDC, GetStockObject( NULL_BRUSH ) );
+
+	Ellipse( item.hDC, nCenterX - nRadius, nCenterY - nRadius, nCenterX + nRadius, nCenterY + nRadius );
+}
+
 static void OnDrawButton( const DRAWITEMSTRUCT &item )
 {
 	const bool bDisabled = ( item.itemState & ODS_DISABLED ) != 0;
@@ -528,6 +536,11 @@ static void OnDrawButton( const DRAWITEMSTRUCT &item )
 	FillRect( item.hDC, &item.rcItem, s_App.m_hBackground );
 	FillRound( item.hDC, item.rcItem, nFill, nEdge );
 	DrawButtonText( item, bDisabled );
+
+	if ( item.CtlID == ID_INFO )
+	{
+		DrawInfoCircle( item );
+	}
 
 	if ( item.itemState & ODS_FOCUS )
 	{
@@ -592,7 +605,7 @@ static HICON LoadAppIcon( HINSTANCE hInstance, int nWidthMetric, int nHeightMetr
 static void AddControl( const ControlSpec_t &spec )
 {
 	const Box_t &box = spec.m_Box;
-	HWND hControl    = CreateWindowExW( 0, spec.m_pwszClass, spec.m_pwszText, WS_CHILD | WS_VISIBLE | spec.m_nStyle, Scale( box.m_nX ), Scale( box.m_nY ), Scale( box.m_nWidth ), Scale( box.m_nHeight ), s_App.m_hWnd, reinterpret_cast<HMENU>( static_cast<INT_PTR>( spec.m_nId ) ), nullptr, nullptr );
+	HWND hControl    = CreateWindowExW( 0, spec.m_pwszClass, spec.m_pwszText, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | spec.m_nStyle, Scale( box.m_nX ), Scale( box.m_nY ), Scale( box.m_nWidth ), Scale( box.m_nHeight ), s_App.m_hWnd, reinterpret_cast<HMENU>( static_cast<INT_PTR>( spec.m_nId ) ), nullptr, nullptr );
 
 	HFONT hFont = s_App.m_hFont;
 
@@ -627,6 +640,7 @@ static void AddControls()
 		{ L"BUTTON", L"Remove", nButton, ID_REMOVE, { 232, 242, 112, 34 }, false, &s_App.m_hRemove },
 		{ L"BUTTON", L"Repatch", nButton, ID_REPATCH, { 352, 242, 112, 34 }, false, &s_App.m_hRepatch },
 		{ L"BUTTON", L"Launch", nButton, ID_LAUNCH, { 472, 242, 112, 34 }, false, &s_App.m_hLaunch },
+		{ L"BUTTON", L"i", nButton, ID_INFO, { 16, 242, 34, 34 }, false, nullptr },
 	};
 
 	for ( const ControlSpec_t &spec : controls )
@@ -650,6 +664,7 @@ static void OnCreate( HWND hWnd )
 	AddControls();
 
 	DragAcceptFiles( hWnd, TRUE );
+	LoadAuthorAvatars( hWnd );
 	Refresh();
 	SetFocus( s_App.m_hPath );
 }
@@ -685,6 +700,15 @@ static LRESULT CALLBACK WindowProc( HWND hWnd, UINT nMessage, WPARAM wParam, LPA
 
 		case WM_CTLCOLOREDIT:
 			return OnCtlColor( reinterpret_cast<HDC>( wParam ), s_nText, s_nField, s_App.m_hField );
+
+		// Buttons fill themselves with this before WM_DRAWITEM: the default system brush flashes white
+		case WM_CTLCOLORBTN:
+			return reinterpret_cast<LRESULT>( GetStockObject( NULL_BRUSH ) );
+
+		case s_nAuthorAvatarsMessage:
+			OnAuthorAvatars();
+
+			return 0;
 
 		case WM_CTLCOLORSTATIC:
 			return OnCtlColor( reinterpret_cast<HDC>( wParam ), StaticColor( GetDlgCtrlID( reinterpret_cast<HWND>( lParam ) ) ), s_nBackground, s_App.m_hBackground );
@@ -749,20 +773,31 @@ int WINAPI wWinMain( HINSTANCE hInstance, HINSTANCE, PWSTR, int nShowCmd )
 	s_App.m_hBackground = CreateSolidBrush( s_nBackground );
 	s_App.m_hField      = CreateSolidBrush( s_nField );
 
+	// The authors card draws avatars and its link icons with GDI+
+	const Gdiplus::GdiplusStartupInput gdiplusInput;
+	ULONG_PTR nGdiplusToken = 0;
+	Gdiplus::GdiplusStartup( &nGdiplusToken, &gdiplusInput, nullptr );
+
 	const wchar_t *const pwszClass = L"HppxDarkSetup";
 	RegisterWindowClass( hInstance, pwszClass );
+	InitAuthors( hInstance, s_App.m_nDpi );
 
 	HWND hWnd = CreateMainWindow( hInstance, pwszClass );
+
+	if ( hWnd )
+	{
+		ShowWindow( hWnd, nShowCmd );
+		RunMessageLoop( hWnd );
+	}
+
+	FreeAuthorAvatars();
+	Gdiplus::GdiplusShutdown( nGdiplusToken );
+	CoUninitialize();
 
 	if ( !hWnd )
 	{
 		return 1;
 	}
-
-	ShowWindow( hWnd, nShowCmd );
-	RunMessageLoop( hWnd );
-
-	CoUninitialize();
 
 	return 0;
 }

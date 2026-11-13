@@ -12,3 +12,6 @@ cmake-build-*/
 # Hammer++ runtime files, in case the patcher is pointed at a copy inside this folder
 *.log
 *.mdmp
+
+# Image sources
+*.psd
