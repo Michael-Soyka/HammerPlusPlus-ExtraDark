@@ -8,6 +8,9 @@
 #include "theme/icons.h"
 #include "core/iat_hook.h"
 
+#include <uxtheme.h>
+#include <vssym32.h>
+
 // RT_BITMAP as a number: the project builds without UNICODE
 static const ULONG_PTR s_nBitmapType = 2;
 
@@ -35,6 +38,18 @@ static FARPROC s_pSizeofResource  = nullptr;
 static FARPROC s_pLoadBitmapW     = nullptr;
 static FARPROC s_pLoadImageA      = nullptr;
 static FARPROC s_pLoadImageW      = nullptr;
+
+// Visgroup tree check boxes: unchecked, unchecked, checked, partly checked
+static const ULONG_PTR s_nCheckStrip = 223;
+static const int s_nCheckCell = 16;
+
+// Image list mask color of the strip: the cell outside the glyph
+static const COLORREF s_CheckMask = RGB( 255, 255, 255 );
+
+static COLORREF s_Background = RGB( 30, 30, 30 );
+
+static HBITMAP CreateCheckStrip();
+static bool IsCheckStrip( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags );
 
 static bool IsOwnResource( HRSRC hResource )
 {
@@ -120,6 +135,15 @@ static HBITMAP WINAPI HookLoadBitmapW( HINSTANCE hInstance, LPCWSTR pwszName )
 
 static HANDLE WINAPI HookLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
+	if ( IsCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), nType, nFlags ) )
+	{
+		HANDLE hStrip = CreateCheckStrip();
+		if ( hStrip )
+		{
+			return hStrip;
+		}
+	}
+
 	const bool bOwn = nType == IMAGE_BITMAP && !( nFlags & LR_LOADFROMFILE ) && FindOwnBitmap( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), s_nBitmapType );
 	HANDLE hImage = reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( bOwn ? s_hSelf : hInstance, pszName, nType, nWidth, nHeight, nFlags );
 	return hImage;
@@ -127,13 +151,138 @@ static HANDLE WINAPI HookLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT n
 
 static HANDLE WINAPI HookLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
 {
+	if ( IsCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), nType, nFlags ) )
+	{
+		HANDLE hStrip = CreateCheckStrip();
+		if ( hStrip )
+		{
+			return hStrip;
+		}
+	}
+
 	const bool bOwn = nType == IMAGE_BITMAP && !( nFlags & LR_LOADFROMFILE ) && FindOwnBitmap( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), s_nBitmapType );
 	HANDLE hImage = reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( bOwn ? s_hSelf : hInstance, pwszName, nType, nWidth, nHeight, nFlags );
 	return hImage;
 }
 
-void Icons_Init()
+// Check box strip drawn by the dark theme. Made on request: the image list takes the bitmap
+// and deletes it, and the theme cannot be opened under the loader lock
+static HBITMAP CreateCheckStrip()
 {
+	HTHEME hTheme = OpenThemeData( nullptr, L"DarkMode_Explorer::Button" );
+	if ( !hTheme )
+	{
+		return nullptr;
+	}
+
+	const int nStates[] = { CBS_UNCHECKEDNORMAL, CBS_UNCHECKEDNORMAL, CBS_CHECKEDNORMAL, CBS_MIXEDNORMAL };
+	const int nWidth = s_nCheckCell * ARRAYSIZE( nStates );
+
+	BITMAPINFO info = {};
+	info.bmiHeader.biSize = sizeof( info.bmiHeader );
+	info.bmiHeader.biWidth = nWidth;
+	info.bmiHeader.biHeight = -s_nCheckCell;
+	info.bmiHeader.biPlanes = 1;
+	info.bmiHeader.biBitCount = 32;
+	info.bmiHeader.biCompression = BI_RGB;
+
+	DWORD *pPixels = nullptr;
+	HDC hDC = CreateCompatibleDC( nullptr );
+	HBITMAP hBitmap = CreateDIBSection( hDC, &info, DIB_RGB_COLORS, reinterpret_cast<void **>( &pPixels ), nullptr, 0 );
+	if ( !hBitmap )
+	{
+		DeleteDC( hDC );
+		CloseThemeData( hTheme );
+		return nullptr;
+	}
+
+	HGDIOBJ hOld = SelectObject( hDC, hBitmap );
+
+	RECT all = { 0, 0, nWidth, s_nCheckCell };
+	HBRUSH hMask = CreateSolidBrush( s_CheckMask );
+	FillRect( hDC, &all, hMask );
+	DeleteObject( hMask );
+
+	SIZE glyph = { 13, 13 };
+	GetThemePartSize( hTheme, hDC, BP_CHECKBOX, CBS_UNCHECKEDNORMAL, nullptr, TS_DRAW, &glyph );
+	glyph.cx = min( glyph.cx, static_cast<LONG>( s_nCheckCell ) );
+	glyph.cy = min( glyph.cy, static_cast<LONG>( s_nCheckCell ) );
+
+	// Rounded corners blend into the tree background, not into the mask
+	HBRUSH hBack = CreateSolidBrush( s_Background );
+	for ( int i = 0; i < ARRAYSIZE( nStates ); i++ )
+	{
+		RECT box;
+		box.left = ( i * s_nCheckCell ) + ( ( s_nCheckCell - glyph.cx ) / 2 );
+		box.top = ( s_nCheckCell - glyph.cy ) / 2;
+		box.right = box.left + glyph.cx;
+		box.bottom = box.top + glyph.cy;
+
+		FillRect( hDC, &box, hBack );
+		DrawThemeBackground( hTheme, hDC, BP_CHECKBOX, nStates[i], &box, nullptr );
+	}
+
+	DeleteObject( hBack );
+	GdiFlush();
+
+	// Inside the glyphs nothing may come out in the mask color
+	const LONG nTop = ( s_nCheckCell - glyph.cy ) / 2;
+	for ( LONG y = nTop; y < nTop + glyph.cy; y++ )
+	{
+		for ( int i = 0; i < ARRAYSIZE( nStates ); i++ )
+		{
+			const LONG nLeft = ( i * s_nCheckCell ) + ( ( s_nCheckCell - glyph.cx ) / 2 );
+			for ( LONG x = nLeft; x < nLeft + glyph.cx; x++ )
+			{
+				DWORD &pixel = pPixels[( y * nWidth ) + x];
+				if ( ( pixel & 0x00FFFFFF ) == 0x00FFFFFF )
+				{
+					pixel = 0x00FEFEFE;
+				}
+			}
+		}
+	}
+
+	SelectObject( hDC, hOld );
+	DeleteDC( hDC );
+	CloseThemeData( hTheme );
+
+	return hBitmap;
+}
+
+static bool IsCheckStrip( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags )
+{
+	const bool bStrip = s_hHammer && hInstance == s_hHammer && nType == IMAGE_BITMAP && !( nFlags & LR_LOADFROMFILE ) && nName == s_nCheckStrip;
+
+	return bStrip;
+}
+
+static HANDLE WINAPI HookComctlLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
+{
+	HANDLE hImage = IsCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), nType, nFlags ) ? CreateCheckStrip() : nullptr;
+	if ( !hImage )
+	{
+		hImage = reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( hInstance, pszName, nType, nWidth, nHeight, nFlags );
+	}
+
+	return hImage;
+}
+
+static HANDLE WINAPI HookComctlLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT nType, int nWidth, int nHeight, UINT nFlags )
+{
+	HANDLE hImage = IsCheckStrip( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), nType, nFlags ) ? CreateCheckStrip() : nullptr;
+	if ( !hImage )
+	{
+		hImage = reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( hInstance, pwszName, nType, nWidth, nHeight, nFlags );
+	}
+
+	return hImage;
+}
+
+void Icons_Init( COLORREF background )
+{
+	s_Background = background;
+
 	GetModuleHandleExW(
 		GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 		reinterpret_cast<LPCWSTR>( &Icons_Init ),
@@ -174,5 +323,22 @@ int Icons_HookModule( HMODULE hHammer )
 	};
 
 	const int nReplaced = HookImports( hHammer, hooks, ARRAYSIZE( hooks ) );
+	return nReplaced;
+}
+
+int Icons_HookComctl( HMODULE hComctl )
+{
+	if ( !s_pLoadImageA || !s_pLoadImageW )
+	{
+		return 0;
+	}
+
+	const ImportHook_t hooks[] =
+	{
+		{ s_pLoadImageA, reinterpret_cast<void *>( &HookComctlLoadImageA ) },
+		{ s_pLoadImageW, reinterpret_cast<void *>( &HookComctlLoadImageW ) },
+	};
+
+	const int nReplaced = HookImports( hComctl, hooks, ARRAYSIZE( hooks ) );
 	return nReplaced;
 }

@@ -351,7 +351,7 @@ static void HookLoadedModules()
 		if ( IsHookedModule( wszName ) )
 		{
 			const int nReplaced = HookImports( hModules[i], s_ColorHooks, ARRAYSIZE( s_ColorHooks ) );
-			const int nIcons = _wcsicmp( wszName, L"hammerplusplus_dll.dll" ) ? 0 : Icons_HookModule( hModules[i] );
+			const int nIcons = _wcsicmp( wszName, L"hammerplusplus_dll.dll" ) ? Icons_HookComctl( hModules[i] ) : Icons_HookModule( hModules[i] );
 			s_hHooked[s_nHooked++] = hModules[i];
 			Log( "hooked %ls: %d color imports, %d resource imports", wszName, nReplaced, nIcons );
 		}
@@ -2066,7 +2066,7 @@ void DarkTheme_Init()
 	s_ColorHooks[ 6 ] = { s_pMessageBoxIndirectW, reinterpret_cast<void *>( &HookMessageBoxIndirectW ) };
 
 	InitDarkMode();
-	Icons_Init();
+	Icons_Init( s_ColorWindow );
 	RegisterDllNotification();
 	HookLoadedModules();
 
