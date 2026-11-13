@@ -1,7 +1,7 @@
 //=========== Copyright 2026 Michael Soyka, All rights reserved. ==============//
 //
-// Purpose: Bitmaps of hammerplusplus_dll.dll replaced by the ones built into hppxdark.dll
-//			(src/assets/Bitmap<id>.bmp, same resource ids)
+// Purpose: Bitmaps and icons of hammerplusplus_dll.dll replaced by the ones built into hppxdark.dll
+//			(src/assets/Bitmap<id>.bmp and Icon<id>.ico, same resource ids)
 //
 //=============================================================================//
 
@@ -11,8 +11,9 @@
 #include <uxtheme.h>
 #include <vssym32.h>
 
-// RT_BITMAP as a number: the project builds without UNICODE
+// RT_BITMAP and RT_GROUP_ICON as numbers: the project builds without UNICODE
 static const ULONG_PTR s_nBitmapType = 2;
+static const ULONG_PTR s_nIconType = 14;
 
 static HMODULE s_hSelf   = nullptr;
 static HMODULE s_hHammer = nullptr;
@@ -29,6 +30,8 @@ using SizeofResource_t  = DWORD ( WINAPI * )( HMODULE, HRSRC );
 using LoadBitmapW_t     = HBITMAP ( WINAPI * )( HINSTANCE, LPCWSTR );
 using LoadImageA_t      = HANDLE ( WINAPI * )( HINSTANCE, LPCSTR, UINT, int, int, UINT );
 using LoadImageW_t      = HANDLE ( WINAPI * )( HINSTANCE, LPCWSTR, UINT, int, int, UINT );
+using LoadIconA_t       = HICON ( WINAPI * )( HINSTANCE, LPCSTR );
+using LoadIconW_t       = HICON ( WINAPI * )( HINSTANCE, LPCWSTR );
 
 static FARPROC s_pFindResourceA   = nullptr;
 static FARPROC s_pFindResourceW   = nullptr;
@@ -38,6 +41,8 @@ static FARPROC s_pSizeofResource  = nullptr;
 static FARPROC s_pLoadBitmapW     = nullptr;
 static FARPROC s_pLoadImageA      = nullptr;
 static FARPROC s_pLoadImageW      = nullptr;
+static FARPROC s_pLoadIconA       = nullptr;
+static FARPROC s_pLoadIconW       = nullptr;
 
 // Visgroup tree check boxes: unchecked, unchecked, checked, partly checked
 static const ULONG_PTR s_nCheckStrip = 223;
@@ -79,6 +84,28 @@ static HRSRC FindOwnBitmap( HMODULE hModule, ULONG_PTR nName, ULONG_PTR nType )
 	}
 
 	return hResource;
+}
+
+// Our icon for a request to the Hammer++ DLL by numeric id: user32 then reads it from our module
+static bool HasOwnIcon( HMODULE hModule, ULONG_PTR nName )
+{
+	const bool bOwn = s_hHammer && hModule == s_hHammer && IS_INTRESOURCE( nName ) &&
+		reinterpret_cast<FindResourceW_t>( s_pFindResourceW )( s_hSelf, MAKEINTRESOURCEW( nName ), MAKEINTRESOURCEW( s_nIconType ) );
+
+	return bOwn;
+}
+
+// Image of LoadImage taken from our module
+static bool IsOwnImage( HINSTANCE hInstance, ULONG_PTR nName, UINT nType, UINT nFlags )
+{
+	if ( nFlags & LR_LOADFROMFILE )
+	{
+		return false;
+	}
+
+	const bool bOwn = ( nType == IMAGE_BITMAP && FindOwnBitmap( hInstance, nName, s_nBitmapType ) ) || ( nType == IMAGE_ICON && HasOwnIcon( hInstance, nName ) );
+
+	return bOwn;
 }
 
 static HRSRC WINAPI HookFindResourceA( HMODULE hModule, LPCSTR pszName, LPCSTR pszType )
@@ -144,7 +171,7 @@ static HANDLE WINAPI HookLoadImageA( HINSTANCE hInstance, LPCSTR pszName, UINT n
 		}
 	}
 
-	const bool bOwn = nType == IMAGE_BITMAP && !( nFlags & LR_LOADFROMFILE ) && FindOwnBitmap( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), s_nBitmapType );
+	const bool bOwn = IsOwnImage( hInstance, reinterpret_cast<ULONG_PTR>( pszName ), nType, nFlags );
 	HANDLE hImage = reinterpret_cast<LoadImageA_t>( s_pLoadImageA )( bOwn ? s_hSelf : hInstance, pszName, nType, nWidth, nHeight, nFlags );
 	return hImage;
 }
@@ -160,9 +187,23 @@ static HANDLE WINAPI HookLoadImageW( HINSTANCE hInstance, LPCWSTR pwszName, UINT
 		}
 	}
 
-	const bool bOwn = nType == IMAGE_BITMAP && !( nFlags & LR_LOADFROMFILE ) && FindOwnBitmap( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), s_nBitmapType );
+	const bool bOwn = IsOwnImage( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ), nType, nFlags );
 	HANDLE hImage = reinterpret_cast<LoadImageW_t>( s_pLoadImageW )( bOwn ? s_hSelf : hInstance, pwszName, nType, nWidth, nHeight, nFlags );
 	return hImage;
+}
+
+static HICON WINAPI HookLoadIconA( HINSTANCE hInstance, LPCSTR pszName )
+{
+	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pszName ) );
+	HICON hIcon = reinterpret_cast<LoadIconA_t>( s_pLoadIconA )( bOwn ? s_hSelf : hInstance, pszName );
+	return hIcon;
+}
+
+static HICON WINAPI HookLoadIconW( HINSTANCE hInstance, LPCWSTR pwszName )
+{
+	const bool bOwn = HasOwnIcon( hInstance, reinterpret_cast<ULONG_PTR>( pwszName ) );
+	HICON hIcon = reinterpret_cast<LoadIconW_t>( s_pLoadIconW )( bOwn ? s_hSelf : hInstance, pwszName );
+	return hIcon;
 }
 
 // Check box strip drawn by the dark theme. Made on request: the image list takes the bitmap
@@ -299,6 +340,8 @@ void Icons_Init( COLORREF background )
 	s_pLoadBitmapW     = GetProcAddress( hUser32, "LoadBitmapW" );
 	s_pLoadImageA      = GetProcAddress( hUser32, "LoadImageA" );
 	s_pLoadImageW      = GetProcAddress( hUser32, "LoadImageW" );
+	s_pLoadIconA       = GetProcAddress( hUser32, "LoadIconA" );
+	s_pLoadIconW       = GetProcAddress( hUser32, "LoadIconW" );
 }
 
 int Icons_HookModule( HMODULE hHammer )
@@ -320,6 +363,8 @@ int Icons_HookModule( HMODULE hHammer )
 		{ s_pLoadBitmapW,     reinterpret_cast<void *>( &HookLoadBitmapW )     },
 		{ s_pLoadImageA,      reinterpret_cast<void *>( &HookLoadImageA )      },
 		{ s_pLoadImageW,      reinterpret_cast<void *>( &HookLoadImageW )      },
+		{ s_pLoadIconA,       reinterpret_cast<void *>( &HookLoadIconA )       },
+		{ s_pLoadIconW,       reinterpret_cast<void *>( &HookLoadIconW )       },
 	};
 
 	const int nReplaced = HookImports( hHammer, hooks, ARRAYSIZE( hooks ) );

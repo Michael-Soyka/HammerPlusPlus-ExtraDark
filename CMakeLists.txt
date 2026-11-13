@@ -84,6 +84,14 @@ foreach( ASSET ${HPPXDARK_ASSETS} )
 	string( APPEND HPPXDARK_RC "${ASSET_ID} BITMAP \"${ASSET}\"\n" )
 endforeach ()
 
+# src/assets/Icon<id>.ico become icon resources <id>, replacing the Hammer++ ones
+file( GLOB HPPXDARK_ICONS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/assets/Icon*.ico" )
+foreach( ASSET ${HPPXDARK_ICONS} )
+	get_filename_component( ASSET_NAME "${ASSET}" NAME_WE )
+	string( REGEX REPLACE "^Icon" "" ASSET_ID "${ASSET_NAME}" )
+	string( APPEND HPPXDARK_RC "${ASSET_ID} ICON \"${ASSET}\"\n" )
+endforeach ()
+
 file( GENERATE OUTPUT "${CMAKE_BINARY_DIR}/hppxdark_assets.rc" CONTENT "${HPPXDARK_RC}" )
 target_sources( hppxdark PRIVATE "${CMAKE_BINARY_DIR}/hppxdark_assets.rc" )
 hppxdark_version_resource( hppxdark hppxdark.dll VFT_DLL "Hammer++ Extra Dark proxy DLL" )
