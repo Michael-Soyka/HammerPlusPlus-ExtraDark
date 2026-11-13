@@ -5,75 +5,91 @@
 //=============================================================================//
 
 #include "installer/hammer_dir.h"
+#include "installer/hammer_paths.h"
 
 #include <system_error>
 
 namespace fs = std::filesystem;
 
-static bool IsFile( const fs::path &path )
+static bool IsPastedPathEdge( wchar_t c )
 {
-	std::error_code error;
-	const bool bFile = fs::is_regular_file( path, error );
-
-	return bFile;
+	const bool bEdge = c == L'"' || c == L' ';
+	return bEdge;
 }
 
-HammerDir_t FindHammerDir( const std::wstring &path )
+// Pasted paths often come quoted
+static std::wstring TrimPastedPath( const std::wstring &path )
 {
-	HammerDir_t result;
-
-	// Pasted paths often come quoted
-	std::wstring typed = path;
-	while ( !typed.empty() && ( typed.back() == L'"' || typed.back() == L' ' ) )
+	size_t nStart = 0;
+	size_t nEnd = path.size();
+	while ( nEnd > nStart && IsPastedPathEdge( path[nEnd - 1] ) )
 	{
-		typed.pop_back();
+		nEnd--;
 	}
 
-	while ( !typed.empty() && ( typed.front() == L'"' || typed.front() == L' ' ) )
+	while ( nStart < nEnd && IsPastedPathEdge( path[nStart] ) )
 	{
-		typed.erase( typed.begin() );
+		nStart++;
 	}
 
-	if ( typed.empty() )
-	{
-		return result;
-	}
+	const std::wstring trimmed = path.substr( nStart, nEnd - nStart );
+	return trimmed;
+}
 
-	result.m_nState = HAMMER_STATE_NO_EXE;
-
-	const fs::path base( typed );
+// The folder itself, x64 or win64 under it: where hammerplusplus.exe is, empty when nowhere
+static fs::path FindExeDir( const fs::path &base )
+{
 	for ( const fs::path &candidate : { base, base / L"x64", base / L"win64" } )
 	{
-		if ( !IsFile( candidate / L"hammerplusplus.exe" ) )
+		if ( !IsFile( MakeHammerPaths( candidate ).m_Exe ) )
 		{
 			continue;
 		}
 
 		std::error_code error;
-		result.m_Dir = fs::canonical( candidate, error );
-		if ( error )
-		{
-			result.m_Dir = candidate;
-		}
-
-		const fs::path moduleDir = result.m_Dir / L"hammerplusplus" / L"bin";
-		const fs::path module = moduleDir / L"hammerplusplus_dll.dll";
-		if ( !IsFile( module ) )
-		{
-			result.m_nState = HAMMER_STATE_NO_DLL;
-		}
-		else if ( IsFile( fs::path( module ).concat( L".orig" ) ) )
-		{
-			result.m_nState = HAMMER_STATE_PATCHED;
-			result.m_bHasVersion = ReadFileVersion( moduleDir / L"hppxdark.dll", result.m_Installed );
-		}
-		else
-		{
-			result.m_nState = HAMMER_STATE_READY;
-		}
-
-		break;
+		const fs::path canonical = fs::canonical( candidate, error );
+		const fs::path dir = error ? candidate : canonical;
+		return dir;
 	}
 
-	return result;
+	return {};
+}
+
+static void DetectState( HammerDir_t &hammer )
+{
+	const HammerPaths_t paths = MakeHammerPaths( hammer.m_Dir );
+	if ( !IsFile( paths.m_Module ) )
+	{
+		hammer.m_nState = HAMMER_STATE_NO_DLL;
+	}
+	else if ( IsFile( paths.m_Backup ) )
+	{
+		hammer.m_nState = HAMMER_STATE_PATCHED;
+		hammer.m_bHasVersion = ReadFileVersion( paths.m_Proxy, hammer.m_Installed );
+	}
+	else
+	{
+		hammer.m_nState = HAMMER_STATE_READY;
+	}
+}
+
+HammerDir_t FindHammerDir( const std::wstring &path )
+{
+	HammerDir_t hammer;
+
+	const std::wstring typed = TrimPastedPath( path );
+	if ( typed.empty() )
+	{
+		return hammer;
+	}
+
+	hammer.m_Dir = FindExeDir( typed );
+	if ( hammer.m_Dir.empty() )
+	{
+		hammer.m_nState = HAMMER_STATE_NO_EXE;
+		return hammer;
+	}
+
+	DetectState( hammer );
+	return hammer;
 }
