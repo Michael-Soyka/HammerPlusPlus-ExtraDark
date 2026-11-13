@@ -1,24 +1,19 @@
-# Hammer++ extra dark patcher
-
-<img width="2560" height="1408" alt="image" src="https://github.com/user-attachments/assets/f98d41db-e120-4fe8-b169-d3a134540dab" />
-<p align="center">Hammer++ - dark theme</p>
-
-Our in-house patcher for [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/).
+<p align="center"><img width="787" height="256" alt="image" src=".github/images/hpp-extra-dark-banner.png" /></p>
 
 English Version | [Русская версия](README_ru.md)
-
-What it does:
-- Dark theme
 
 ## Installation
 
 **Hammer++ must be closed.**
 
-Run **hppxdark_setup.exe** (unpack the release first): enter the game `bin` folder, pick it with **Browse...** or drop it on the window, then press **Patch**. On a patched Hammer++ there are three buttons instead: **Remove** brings back the original, **Repatch** writes `hppxdark.dll` again (named **Update** when the installed one is outdated), **Launch** starts Hammer++.
+1. Run **hppxdark_setup.exe**;
+2. Open the game `bin` folder, via **Browse...** or drop it on the window;
+3. Press **Patch**;
 
-The window also shows the installed version next to the installer's one and whether it is outdated.
+## Showcase
 
-The installer finds `hammerplusplus.exe` in `bin`, `bin\x64` or `bin\win64` and patches `hammerplusplus\bin\hammerplusplus_dll.dll` (the original is saved as `hammerplusplus_dll.dll.orig`). An install made by an earlier version of the patcher (a patched `hammerplusplus.exe`) is rolled back automatically.
+<img width="1920" height="1070" alt="image" src=".github/images/LC.png" />
+<p align="center">Hammer++ - dark theme</p>
 
 ## Configuration
 
@@ -78,19 +73,9 @@ cmake --build build --config Release
 ```
 
 The result is `bin\hppxdark_setup.exe` with both proxy DLLs inside: the x64 configuration builds the x86 `hppxdark.dll` as a nested Win32 configuration. 
-## Versions
-
-`MAJOR.MINOR.BUILD.REVISION`, written on every build by `cmake/version.cmake`:
-- `MAJOR.MINOR` is set by hand in `project( hppxdark VERSION ... )` of `CMakeLists.txt`;
-- `BUILD` is the number of days since 2000-01-01, `REVISION` the seconds since midnight divided by 2 (UTC), the same scheme as .NET `1.0.*` versions.
-
-A later build always has a bigger version, the installer and both DLLs of one build share it. GitHub Actions builds add `-git` to the text version (`1.0.9812.38990-git`); the comparison goes by the numbers. The version goes to the version resource of `hppxdark.dll` and `hppxdark_setup.exe` (Properties - Details in Explorer); the installer compares the installed `hppxdark.dll` with its own.
-
-CMake options:
-- `HPPXDARK_LOG` - process logging, off by default.
 
 ## Authors
 
-- Ficool2 - Creator of the Hammer++ :blue_heart:
+- Ficool2 - Creator of the [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/) :blue_heart:
 - Michael Soyka (Moon-6) - Structure, proj direction, tests
 - Claude - General patcher code
