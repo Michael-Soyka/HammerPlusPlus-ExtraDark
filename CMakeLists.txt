@@ -133,7 +133,9 @@ if ( HPPXDARK_ARCH STREQUAL "x64" )
 
 	add_executable( hppxdark_setup WIN32
 		src/installer/hammer_dir.cpp
+		src/installer/hammer_paths.cpp
 		src/installer/patcher.cpp
+		src/installer/pe_imports.cpp
 		src/installer/version.cpp
 		src/installer/main.cpp
 	)
