@@ -119,14 +119,12 @@ struct StatusLine_t
 
 static int Scale( int nValue )
 {
-	const int nScaled = MulDiv( nValue, s_App.m_nDpi, USER_DEFAULT_SCREEN_DPI );
-	return nScaled;
+	return MulDiv( nValue, s_App.m_nDpi, USER_DEFAULT_SCREEN_DPI );
 }
 
 static RECT ScaleBox( const Box_t &box )
 {
-	const RECT rect = { Scale( box.m_nX ), Scale( box.m_nY ), Scale( box.m_nX + box.m_nWidth ), Scale( box.m_nY + box.m_nHeight ) };
-	return rect;
+	return { Scale( box.m_nX ), Scale( box.m_nY ), Scale( box.m_nX + box.m_nWidth ), Scale( box.m_nY + box.m_nHeight ) };
 }
 
 static std::wstring GetText( HWND hWnd )
@@ -144,8 +142,7 @@ static std::wstring GetText( HWND hWnd )
 
 static bool IsOutdated( const HammerDir_t &hammer )
 {
-	const bool bOutdated = hammer.m_nState == HAMMER_STATE_PATCHED && ( !hammer.m_bHasVersion || CompareVersions( hammer.m_Installed, InstallerVersion() ) < 0 );
-	return bOutdated;
+	return hammer.m_nState == HAMMER_STATE_PATCHED && ( !hammer.m_bHasVersion || CompareVersions( hammer.m_Installed, InstallerVersion() ) < 0 );
 }
 
 static std::wstring DescribeVersion( const HammerDir_t &hammer )
@@ -153,21 +150,17 @@ static std::wstring DescribeVersion( const HammerDir_t &hammer )
 	const std::wstring installer = FormatVersion( InstallerVersion() );
 	if ( hammer.m_nState != HAMMER_STATE_PATCHED )
 	{
-		const std::wstring text = L"Installer version " + installer;
-		return text;
+		return L"Installer version " + installer;
 	}
 
 	if ( !hammer.m_bHasVersion )
 	{
-		const std::wstring text = L"Installed: unknown, older than versioning  \u00b7  Installer: " + installer + L"  \u2014  outdated";
-		return text;
+		return L"Installed: unknown, older than versioning  \u00b7  Installer: " + installer + L"  \u2014  outdated";
 	}
 
 	const int nOrder = CompareVersions( hammer.m_Installed, InstallerVersion() );
 	const wchar_t *pwszVerdict = nOrder < 0 ? L"outdated" : ( nOrder > 0 ? L"newer than this installer" : L"up to date" );
-	const std::wstring text = L"Installed: " + FormatVersion( hammer.m_Installed ) + L"  \u00b7  Installer: " + installer + L"  \u2014  " + pwszVerdict;
-
-	return text;
+	return L"Installed: " + FormatVersion( hammer.m_Installed ) + L"  \u00b7  Installer: " + installer + L"  \u2014  " + pwszVerdict;
 }
 
 static StatusLine_t DescribeStatus( const HammerDir_t &hammer )
@@ -417,12 +410,10 @@ static COLORREF ButtonFillColor( const DRAWITEMSTRUCT &item )
 
 	if ( item.itemState & ODS_SELECTED )
 	{
-		const COLORREF nPressed = bAccent ? s_nAccentPressed : s_nPressed;
-		return nPressed;
+		return bAccent ? s_nAccentPressed : s_nPressed;
 	}
 
-	const COLORREF nFill = bAccent ? s_nAccent : s_nButton;
-	return nFill;
+	return bAccent ? s_nAccent : s_nButton;
 }
 
 static void DrawButtonText( const DRAWITEMSTRUCT &item, bool bDisabled )
@@ -503,9 +494,7 @@ static LRESULT OnCtlColor( HDC hDC, COLORREF nText, COLORREF nBackground, HBRUSH
 {
 	SetTextColor( hDC, nText );
 	SetBkColor( hDC, nBackground );
-
-	const LRESULT nBrush = reinterpret_cast<LRESULT>( hBrush );
-	return nBrush;
+	return reinterpret_cast<LRESULT>( hBrush );
 }
 
 //-----------------------------------------------------------------------------
@@ -514,17 +503,14 @@ static LRESULT OnCtlColor( HDC hDC, COLORREF nText, COLORREF nBackground, HBRUSH
 
 static HFONT CreateUiFont( int nSize, int nWeight )
 {
-	HFONT hFont = CreateFontW( -Scale( nSize ), 0, 0, 0, nWeight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI" );
-	return hFont;
+	return CreateFontW( -Scale( nSize ), 0, 0, 0, nWeight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI" );
 }
 
 static HICON LoadAppIcon( HINSTANCE hInstance, int nWidthMetric, int nHeightMetric )
 {
 	const int nWidth = GetSystemMetricsForDpi( nWidthMetric, s_App.m_nDpi );
 	const int nHeight = GetSystemMetricsForDpi( nHeightMetric, s_App.m_nDpi );
-	HICON hIcon = static_cast<HICON>( LoadImageW( hInstance, MAKEINTRESOURCEW( IDI_APP ), IMAGE_ICON, nWidth, nHeight, LR_DEFAULTCOLOR ) );
-
-	return hIcon;
+	return static_cast<HICON>( LoadImageW( hInstance, MAKEINTRESOURCEW( IDI_APP ), IMAGE_ICON, nWidth, nHeight, LR_DEFAULTCOLOR ) );
 }
 
 static void AddControl( const ControlSpec_t &spec )
@@ -621,8 +607,7 @@ static LRESULT CALLBACK WindowProc( HWND hWnd, UINT nMessage, WPARAM wParam, LPA
 			return 0;
 	}
 
-	const LRESULT nResult = DefWindowProcW( hWnd, nMessage, wParam, lParam );
-	return nResult;
+	return DefWindowProcW( hWnd, nMessage, wParam, lParam );
 }
 
 static bool RegisterWindowClass( HINSTANCE hInstance, const wchar_t *pwszName )
@@ -636,8 +621,7 @@ static bool RegisterWindowClass( HINSTANCE hInstance, const wchar_t *pwszName )
 	windowClass.hbrBackground = s_App.m_hBackground;
 	windowClass.lpszClassName = pwszName;
 
-	const bool bRegistered = RegisterClassExW( &windowClass ) != 0;
-	return bRegistered;
+	return RegisterClassExW( &windowClass ) != 0;
 }
 
 // Fixed size: no resizing, no maximize
@@ -648,9 +632,7 @@ static HWND CreateMainWindow( HINSTANCE hInstance, const wchar_t *pwszClass )
 	AdjustWindowRectExForDpi( &window, nStyle, FALSE, 0, s_App.m_nDpi );
 
 	const std::wstring title = L"Hammer++ Extra Dark " + FormatVersion( InstallerVersion() );
-	HWND hWnd = CreateWindowExW( 0, pwszClass, title.c_str(), nStyle, CW_USEDEFAULT, CW_USEDEFAULT, window.right - window.left, window.bottom - window.top, nullptr, nullptr, hInstance, nullptr );
-
-	return hWnd;
+	return CreateWindowExW( 0, pwszClass, title.c_str(), nStyle, CW_USEDEFAULT, CW_USEDEFAULT, window.right - window.left, window.bottom - window.top, nullptr, nullptr, hInstance, nullptr );
 }
 
 static void RunMessageLoop( HWND hWnd )
