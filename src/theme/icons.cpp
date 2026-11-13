@@ -6,6 +6,7 @@
 //=============================================================================//
 
 #include "theme/icons.h"
+#include "core/gdi.h"
 #include "core/iat_hook.h"
 
 #include <uxtheme.h>
@@ -163,10 +164,8 @@ static SIZE CheckGlyphSize( HTHEME hTheme, HDC hDC )
 
 static void FillWith( HDC hDC, const RECT &rect, COLORREF color )
 {
-	HBRUSH hBrush = CreateSolidBrush( color );
-	FillRect( hDC, &rect, hBrush );
-
-	DeleteObject( hBrush );
+	const GdiObject_t<HBRUSH> brush( CreateSolidBrush( color ) );
+	FillRect( hDC, &rect, brush.m_hObject );
 }
 
 // Rounded corners blend into the tree background, not into the mask
@@ -205,9 +204,9 @@ static void KeepGlyphsOpaque( DWORD *pPixels, int nWidth, const SIZE &glyph )
 // opened under the loader lock
 static HBITMAP CreateCheckStrip()
 {
-	HTHEME hTheme = OpenThemeData( nullptr, L"DarkMode_Explorer::Button" );
+	const ThemeData_t theme( nullptr, L"DarkMode_Explorer::Button" );
 
-	if ( !hTheme )
+	if ( !theme.m_hTheme )
 	{
 		return nullptr;
 	}
@@ -222,25 +221,23 @@ static HBITMAP CreateCheckStrip()
 	info.bmiHeader.biBitCount    = 32;
 	info.bmiHeader.biCompression = BI_RGB;
 
+	const MemoryDC_t memory( nullptr );
+	HDC hDC = memory.m_hDC;
+
 	DWORD *pPixels  = nullptr;
-	HDC hDC         = CreateCompatibleDC( nullptr );
 	HBITMAP hBitmap = CreateDIBSection( hDC, &info, DIB_RGB_COLORS, reinterpret_cast<void **>( &pPixels ), nullptr, 0 );
 
-	if ( hBitmap )
+	if ( !hBitmap )
 	{
-		HGDIOBJ hOld = SelectObject( hDC, hBitmap );
-
-		FillWith( hDC, { 0, 0, nWidth, s_nCheckCell }, s_CheckMask );
-		const SIZE glyph = CheckGlyphSize( hTheme, hDC );
-		DrawCheckGlyphs( hTheme, hDC, glyph );
-		GdiFlush();
-		KeepGlyphsOpaque( pPixels, nWidth, glyph );
-
-		SelectObject( hDC, hOld );
+		return nullptr;
 	}
 
-	DeleteDC( hDC );
-	CloseThemeData( hTheme );
+	const SelectedObject_t selected( hDC, hBitmap );
+	FillWith( hDC, { 0, 0, nWidth, s_nCheckCell }, s_CheckMask );
+	const SIZE glyph = CheckGlyphSize( theme.m_hTheme, hDC );
+	DrawCheckGlyphs( theme.m_hTheme, hDC, glyph );
+	GdiFlush();
+	KeepGlyphsOpaque( pPixels, nWidth, glyph );
 
 	return hBitmap;
 }

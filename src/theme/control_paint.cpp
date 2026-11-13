@@ -8,6 +8,7 @@
 #include "theme/control_paint.h"
 #include "theme/system_colors.h"
 #include "theme/window_util.h"
+#include "core/gdi.h"
 
 #include <uxtheme.h>
 #include <vssym32.h>
@@ -22,31 +23,11 @@ static const SIZE s_DefaultGlyph = { 13, 13 };
 // Toolbar button corners
 static const int s_nToolbarRound = 8;
 
-// The font of a control selected into a DC for the lifetime of the object
-struct ControlFont_t
+// Null when the control draws with the system font
+static HFONT ControlFont( HWND hWnd )
 {
-	ControlFont_t( HWND hWnd, HDC hDC )
-		: m_hDC( hDC )
-	{
-		HFONT hFont = reinterpret_cast<HFONT>( SendMessageW( hWnd, WM_GETFONT, 0, 0 ) );
-
-		if ( hFont )
-		{
-			m_hOld = SelectObject( hDC, hFont );
-		}
-	}
-
-	~ControlFont_t()
-	{
-		if ( m_hOld )
-		{
-			SelectObject( m_hDC, m_hOld );
-		}
-	}
-
-	HDC		m_hDC;
-	HGDIOBJ	m_hOld = nullptr;
-};
+	return reinterpret_cast<HFONT>( SendMessageW( hWnd, WM_GETFONT, 0, 0 ) );
+}
 
 //-----------------------------------------------------------------------------
 // Colors and plain fills
@@ -86,11 +67,8 @@ LRESULT CtlColor( UINT nMsg, HDC hDC, LRESULT nDefault )
 
 void PaintFlat( HWND hWnd )
 {
-	PAINTSTRUCT paint;
-	HDC hDC = BeginPaint( hWnd, &paint );
-	FillRect( hDC, &paint.rcPaint, DarkBrush( COLOR_BTNFACE ) );
-
-	EndPaint( hWnd, &paint );
+	const PaintDC_t paint( hWnd );
+	FillRect( paint.m_hDC, &paint.m_Paint.rcPaint, DarkBrush( COLOR_BTNFACE ) );
 }
 
 // The splitter of a Hammer++ document is a child window of an AfxMDIFrame class
@@ -102,21 +80,18 @@ bool IsSplitter( HWND hWnd )
 // The client area left between the panes is the bars: filled flat, panes excluded
 void PaintSplitter( HWND hWnd )
 {
-	PAINTSTRUCT paint;
-	HDC hDC = BeginPaint( hWnd, &paint );
+	const PaintDC_t paint( hWnd );
 
 	for ( HWND hChild = GetWindow( hWnd, GW_CHILD ); hChild; hChild = GetWindow( hChild, GW_HWNDNEXT ) )
 	{
 		if ( IsWindowVisible( hChild ) )
 		{
 			const RECT pane = ChildRect( hWnd, hChild );
-			ExcludeClipRect( hDC, pane.left, pane.top, pane.right, pane.bottom );
+			ExcludeClipRect( paint.m_hDC, pane.left, pane.top, pane.right, pane.bottom );
 		}
 	}
 
-	FillRect( hDC, &paint.rcPaint, DarkBrush( COLOR_BTNFACE ) );
-
-	EndPaint( hWnd, &paint );
+	FillRect( paint.m_hDC, &paint.m_Paint.rcPaint, DarkBrush( COLOR_BTNFACE ) );
 }
 
 //-----------------------------------------------------------------------------
@@ -129,11 +104,9 @@ void PaintToolbarNonClient( HWND hWnd )
 	const RECT window = WindowRectAtOrigin( hWnd );
 	const RECT client = ClientRectInWindow( hWnd );
 
-	HDC hDC = GetWindowDC( hWnd );
-	ExcludeClipRect( hDC, client.left, client.top, client.right, client.bottom );
-	FillRect( hDC, &window, DarkBrush( COLOR_BTNFACE ) );
-
-	ReleaseDC( hWnd, hDC );
+	const WindowDC_t dc( hWnd, GetWindowDC( hWnd ) );
+	ExcludeClipRect( dc.m_hDC, client.left, client.top, client.right, client.bottom );
+	FillRect( dc.m_hDC, &window, DarkBrush( COLOR_BTNFACE ) );
 }
 
 // The square between both scroll bars, user32 fills it with the light face color
@@ -149,10 +122,8 @@ void PaintScrollCorner( HWND hWnd )
 	const RECT client = ClientRectInWindow( hWnd );
 	const RECT corner = { client.right, client.bottom, client.right + GetSystemMetrics( SM_CXVSCROLL ), client.bottom + GetSystemMetrics( SM_CYHSCROLL ) };
 
-	HDC hDC = GetWindowDC( hWnd );
-	FillRect( hDC, &corner, DarkBrush( COLOR_BTNFACE ) );
-
-	ReleaseDC( hWnd, hDC );
+	const WindowDC_t dc( hWnd, GetWindowDC( hWnd ) );
+	FillRect( dc.m_hDC, &corner, DarkBrush( COLOR_BTNFACE ) );
 }
 
 // The 2 px sunken client edge of input controls becomes a 1 px line like the dark combo boxes:
@@ -181,12 +152,10 @@ void PaintClientEdge( HWND hWnd )
 		hInner = EditBrush();
 	}
 
-	HDC hDC = GetWindowDC( hWnd );
-	FrameRect( hDC, &rect, BorderBrush() );
+	const WindowDC_t dc( hWnd, GetWindowDC( hWnd ) );
+	FrameRect( dc.m_hDC, &rect, BorderBrush() );
 	InflateRect( &rect, -1, -1 );
-	FrameRect( hDC, &rect, hInner );
-
-	ReleaseDC( hWnd, hDC );
+	FrameRect( dc.m_hDC, &rect, hInner );
 }
 
 void ThemeLateScrollBars( HWND hWnd )
@@ -222,12 +191,14 @@ static RECT PaintTabBody( HWND hWnd, HDC hDC )
 	TabCtrl_AdjustRect( hWnd, FALSE, &body );
 	InflateRect( &body, 2, 2 );
 
-	const int nSaved = SaveDC( hDC );
-	RECT inside      = body;
-	InflateRect( &inside, -1, -1 );
-	ExcludeClipRect( hDC, inside.left, inside.top, inside.right, inside.bottom );
-	FillRect( hDC, &client, DarkBrush( COLOR_BTNFACE ) );
-	RestoreDC( hDC, nSaved );
+	{
+		const SavedDC_t saved( hDC );
+
+		RECT inside = body;
+		InflateRect( &inside, -1, -1 );
+		ExcludeClipRect( hDC, inside.left, inside.top, inside.right, inside.bottom );
+		FillRect( hDC, &client, DarkBrush( COLOR_BTNFACE ) );
+	}
 
 	FrameRect( hDC, &body, BorderBrush() );
 
@@ -293,25 +264,20 @@ static void PaintTab( HWND hWnd, HDC hDC, int nTab, bool bSelected, const RECT &
 
 void PaintTabControl( HWND hWnd )
 {
-	PAINTSTRUCT paint;
-	HDC hDC = BeginPaint( hWnd, &paint );
+	const PaintDC_t paint( hWnd );
+	HDC hDC = paint.m_hDC;
 
 	const RECT body = PaintTabBody( hWnd, hDC );
+	const SelectedObject_t font( hDC, ControlFont( hWnd ) );
+	SetBkMode( hDC, TRANSPARENT );
 
+	const int nSelected = TabCtrl_GetCurSel( hWnd );
+	const int nCount    = TabCtrl_GetItemCount( hWnd );
+
+	for ( int i = 0; i < nCount; i++ )
 	{
-		const ControlFont_t font( hWnd, hDC );
-		SetBkMode( hDC, TRANSPARENT );
-
-		const int nSelected = TabCtrl_GetCurSel( hWnd );
-		const int nCount    = TabCtrl_GetItemCount( hWnd );
-
-		for ( int i = 0; i < nCount; i++ )
-		{
-			PaintTab( hWnd, hDC, i, i == nSelected, body );
-		}
+		PaintTab( hWnd, hDC, i, i == nSelected, body );
 	}
-
-	EndPaint( hWnd, &paint );
 }
 
 //-----------------------------------------------------------------------------
@@ -323,7 +289,7 @@ void PaintStatusBarBorders( HWND hWnd )
 {
 	const int nParts = static_cast<int>( SendMessageW( hWnd, SB_GETPARTS, 0, 0 ) );
 
-	HDC hDC = GetDC( hWnd );
+	const WindowDC_t dc( hWnd, GetDC( hWnd ) );
 
 	for ( int i = 0; i < nParts; i++ )
 	{
@@ -331,11 +297,9 @@ void PaintStatusBarBorders( HWND hWnd )
 
 		if ( SendMessageW( hWnd, SB_GETRECT, i, reinterpret_cast<LPARAM>( &rect ) ) )
 		{
-			FrameRect( hDC, &rect, BorderBrush() );
+			FrameRect( dc.m_hDC, &rect, BorderBrush() );
 		}
 	}
-
-	ReleaseDC( hWnd, hDC );
 }
 
 bool IsGroupBox( HWND hWnd )
@@ -347,46 +311,42 @@ bool IsGroupBox( HWND hWnd )
 // left alone, the grouped controls are windows of their own
 void PaintGroupBox( HWND hWnd )
 {
-	PAINTSTRUCT paint;
-	HDC hDC = BeginPaint( hWnd, &paint );
+	const PaintDC_t paint( hWnd );
+	HDC hDC = paint.m_hDC;
 
+	const SelectedObject_t font( hDC, ControlFont( hWnd ) );
+
+	wchar_t wszText[ 256 ] = {};
+	const int nLength      = GetWindowTextW( hWnd, wszText, ARRAYSIZE( wszText ) );
+
+	// An empty caption still keeps the line at half the text height
+	SIZE textSize = {};
+
+	if ( nLength )
 	{
-		const ControlFont_t font( hWnd, hDC );
-
-		wchar_t wszText[ 256 ] = {};
-		const int nLength      = GetWindowTextW( hWnd, wszText, ARRAYSIZE( wszText ) );
-
-		// An empty caption still keeps the line at half the text height
-		SIZE textSize = {};
-
-		if ( nLength )
-		{
-			GetTextExtentPoint32W( hDC, wszText, nLength, &textSize );
-		}
-		else
-		{
-			GetTextExtentPoint32W( hDC, L"X", 1, &textSize );
-		}
-
-		RECT client;
-		GetClientRect( hWnd, &client );
-
-		RECT frame = client;
-		frame.top += textSize.cy / 2;
-		FrameRect( hDC, &frame, BorderBrush() );
-
-		if ( nLength )
-		{
-			RECT caption = { client.left + 6, client.top, client.left + 6 + textSize.cx + 4, client.top + textSize.cy };
-			FillRect( hDC, &caption, DarkBrush( COLOR_BTNFACE ) );
-
-			SetBkMode( hDC, TRANSPARENT );
-			SetTextColor( hDC, TextColor( IsWindowEnabled( hWnd ) != FALSE ) );
-			DrawTextW( hDC, wszText, nLength, &caption, DT_CENTER | DT_SINGLELINE | DT_HIDEPREFIX );
-		}
+		GetTextExtentPoint32W( hDC, wszText, nLength, &textSize );
+	}
+	else
+	{
+		GetTextExtentPoint32W( hDC, L"X", 1, &textSize );
 	}
 
-	EndPaint( hWnd, &paint );
+	RECT client;
+	GetClientRect( hWnd, &client );
+
+	RECT frame = client;
+	frame.top += textSize.cy / 2;
+	FrameRect( hDC, &frame, BorderBrush() );
+
+	if ( nLength )
+	{
+		RECT caption = { client.left + 6, client.top, client.left + 6 + textSize.cx + 4, client.top + textSize.cy };
+		FillRect( hDC, &caption, DarkBrush( COLOR_BTNFACE ) );
+
+		SetBkMode( hDC, TRANSPARENT );
+		SetTextColor( hDC, TextColor( IsWindowEnabled( hWnd ) != FALSE ) );
+		DrawTextW( hDC, wszText, nLength, &caption, DT_CENTER | DT_SINGLELINE | DT_HIDEPREFIX );
+	}
 }
 
 // A group box side by side with this one: another group box right of it at the same height
@@ -556,12 +516,12 @@ static RECT DrawCheckGlyph( HWND hWnd, HDC hDC, const CheckButton_t &button, con
 		nPart = BP_RADIOBUTTON;
 	}
 
-	HTHEME hTheme = OpenThemeData( hWnd, L"Button" );
-	SIZE glyph    = s_DefaultGlyph;
+	const ThemeData_t theme( hWnd, L"Button" );
+	SIZE glyph = s_DefaultGlyph;
 
-	if ( hTheme )
+	if ( theme.m_hTheme )
 	{
-		GetThemePartSize( hTheme, hDC, nPart, nPartState, nullptr, TS_DRAW, &glyph );
+		GetThemePartSize( theme.m_hTheme, hDC, nPart, nPartState, nullptr, TS_DRAW, &glyph );
 	}
 
 	RECT box;
@@ -576,11 +536,9 @@ static RECT DrawCheckGlyph( HWND hWnd, HDC hDC, const CheckButton_t &button, con
 	box.top    = AlignVertically( button.m_nStyle & BS_VCENTER, glyph.cy, client.bottom );
 	box.bottom = box.top + glyph.cy;
 
-	if ( hTheme )
+	if ( theme.m_hTheme )
 	{
-		DrawThemeBackground( hTheme, hDC, nPart, nPartState, &box, nullptr );
-
-		CloseThemeData( hTheme );
+		DrawThemeBackground( theme.m_hTheme, hDC, nPart, nPartState, &box, nullptr );
 	}
 	else
 	{
@@ -729,34 +687,26 @@ void PrintCheckButton( HWND hWnd, HDC hTarget )
 		return;
 	}
 
-	HDC hDC            = CreateCompatibleDC( hTarget );
-	HBITMAP hBitmap    = CreateCompatibleBitmap( hTarget, client.right, client.bottom );
-	HGDIOBJ hOldBitmap = SelectObject( hDC, hBitmap );
+	const MemoryDC_t memory( hTarget );
+	const GdiObject_t<HBITMAP> bitmap( CreateCompatibleBitmap( hTarget, client.right, client.bottom ) );
+	HDC hDC = memory.m_hDC;
 
+	const SelectedObject_t selected( hDC, bitmap.m_hObject );
 	FillRect( hDC, &client, CheckButtonBackground( hWnd, hDC ) );
 
-	{
-		const ControlFont_t font( hWnd, hDC );
-		const CheckButton_t button = ReadCheckButton( hWnd );
+	const SelectedObject_t font( hDC, ControlFont( hWnd ) );
+	const CheckButton_t button = ReadCheckButton( hWnd );
 
-		const RECT box = DrawCheckGlyph( hWnd, hDC, button, client );
-		DrawCaption( hWnd, hDC, button, client, box );
+	const RECT box = DrawCheckGlyph( hWnd, hDC, button, client );
+	DrawCaption( hWnd, hDC, button, client, box );
 
-		BitBlt( hTarget, 0, 0, client.right, client.bottom, hDC, 0, 0, SRCCOPY );
-	}
-
-	SelectObject( hDC, hOldBitmap );
-	DeleteObject( hBitmap );
-	DeleteDC( hDC );
+	BitBlt( hTarget, 0, 0, client.right, client.bottom, hDC, 0, 0, SRCCOPY );
 }
 
 void PaintCheckButton( HWND hWnd )
 {
-	PAINTSTRUCT paint;
-	HDC hDC = BeginPaint( hWnd, &paint );
-	PrintCheckButton( hWnd, hDC );
-
-	EndPaint( hWnd, &paint );
+	const PaintDC_t paint( hWnd );
+	PrintCheckButton( hWnd, paint.m_hDC );
 }
 
 void RepaintCheckButton( HWND hWnd )
@@ -767,10 +717,8 @@ void RepaintCheckButton( HWND hWnd )
 		return;
 	}
 
-	HDC hDC = GetDC( hWnd );
-	PrintCheckButton( hWnd, hDC );
-
-	ReleaseDC( hWnd, hDC );
+	const WindowDC_t dc( hWnd, GetDC( hWnd ) );
+	PrintCheckButton( hWnd, dc.m_hDC );
 }
 
 //-----------------------------------------------------------------------------
@@ -849,8 +797,8 @@ static void DrawUpDownArrow( HDC hDC, const RECT &half, bool bHorizontal, bool b
 
 void PaintUpDown( HWND hWnd )
 {
-	PAINTSTRUCT paint;
-	HDC hDC = BeginPaint( hWnd, &paint );
+	const PaintDC_t paint( hWnd );
+	HDC hDC = paint.m_hDC;
 
 	RECT client;
 	GetClientRect( hWnd, &client );
@@ -868,40 +816,38 @@ void PaintUpDown( HWND hWnd )
 
 	const COLORREF arrow = TextColor( bEnabled );
 
-	const int nSaved = SaveDC( hDC );
-	SelectObject( hDC, GetStockObject( DC_BRUSH ) );
-	SelectObject( hDC, GetStockObject( DC_PEN ) );
-
-	for ( int i = 0; i < ARRAYSIZE( halves.m_Half ); i++ )
 	{
-		const RECT &half = halves.m_Half[ i ];
-		const bool bHot  = bEnabled && ( bOver || bCaptured ) && PtInRect( &half, cursor );
-		COLORREF fill    = g_ColorFace;
+		const SavedDC_t saved( hDC );
+		SelectObject( hDC, GetStockObject( DC_BRUSH ) );
+		SelectObject( hDC, GetStockObject( DC_PEN ) );
 
-		if ( bHot )
+		for ( int i = 0; i < ARRAYSIZE( halves.m_Half ); i++ )
 		{
-			fill = g_ColorMenuHot;
+			const RECT &half = halves.m_Half[ i ];
+			const bool bHot  = bEnabled && ( bOver || bCaptured ) && PtInRect( &half, cursor );
+			COLORREF fill    = g_ColorFace;
 
-			if ( bCaptured )
+			if ( bHot )
 			{
-				fill = g_ColorHilight;
+				fill = g_ColorMenuHot;
+
+				if ( bCaptured )
+				{
+					fill = g_ColorHilight;
+				}
 			}
+
+			SetDCBrushColor( hDC, fill );
+			FillRect( hDC, &half, static_cast<HBRUSH>( GetStockObject( DC_BRUSH ) ) );
+
+			SetDCBrushColor( hDC, arrow );
+			SetDCPenColor( hDC, arrow );
+			DrawUpDownArrow( hDC, half, bHorizontal, i == 0 );
 		}
-
-		SetDCBrushColor( hDC, fill );
-		FillRect( hDC, &half, static_cast<HBRUSH>( GetStockObject( DC_BRUSH ) ) );
-
-		SetDCBrushColor( hDC, arrow );
-		SetDCPenColor( hDC, arrow );
-		DrawUpDownArrow( hDC, half, bHorizontal, i == 0 );
 	}
-
-	RestoreDC( hDC, nSaved );
 
 	FrameRect( hDC, &client, BorderBrush() );
 	FillRect( hDC, &halves.m_Divider, BorderBrush() );
-
-	EndPaint( hWnd, &paint );
 }
 
 //-----------------------------------------------------------------------------
@@ -945,14 +891,12 @@ LRESULT ToolbarCustomDraw( NMTBCUSTOMDRAW *pDraw )
 			edge = g_ColorBorder;
 		}
 
-		const int nSaved = SaveDC( hDC );
+		const SavedDC_t saved( hDC );
 		SelectObject( hDC, GetStockObject( DC_BRUSH ) );
 		SelectObject( hDC, GetStockObject( DC_PEN ) );
 		SetDCBrushColor( hDC, fill );
 		SetDCPenColor( hDC, edge );
 		RoundRect( hDC, rect.left, rect.top, rect.right, rect.bottom, s_nToolbarRound, s_nToolbarRound );
-
-		RestoreDC( hDC, nSaved );
 	}
 
 	pDraw->clrText = TextColor( bEnabled );
